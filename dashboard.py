@@ -617,7 +617,13 @@ def main():
     # TAB 4: BENCHMARKING
     with tab4:
         st.subheader("Performance Benchmarking")
-        st.markdown("Compara detecția cu intervale NAB: dacă punctul ∈ interval NAB → corect")
+        
+        st.markdown("""
+        **Evaluare cu intervale NAB:**
+        - **TP (True Positive)**: Interval care contine cel putin 1 timestamp detectat
+        - **FN (False Negative)**: Interval care NU contine niciun timestamp detectat
+        - **FP (False Positive)**: Timestamp detectat care NU se afla in niciun interval
+        """)
         
         col1, col2 = st.columns(2)
         
@@ -672,7 +678,12 @@ def main():
                                         )
                                         
                                         st.session_state.benchmark_results = metrics
-                                        st.success(f"Benchmark completed: {metrics.detected_anomalies}/{metrics.total_anomalies} detections correct")
+                                        st.success(
+                                            f"Benchmark completed: {metrics.detected_anomalies} TP, "
+                                            f"{metrics.missed_anomalies} FN, {metrics.false_alarms} FP | "
+                                            f"Precision={metrics.precision:.3f}, Recall={metrics.recall:.3f}, "
+                                            f"F1={metrics.f1_score:.3f}"
+                                        )
                                     else:
                                         st.warning("No NAB intervals found for this dataset")
                                 else:
@@ -693,11 +704,11 @@ def main():
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Correct Detections", f"{metrics.detected_anomalies}/{metrics.total_anomalies}")
+                st.metric("True Positives (TP)", f"{metrics.detected_anomalies}/{metrics.total_anomalies}")
             with col2:
-                st.metric("False Alarms", metrics.false_alarms)
+                st.metric("False Negatives (FN)", metrics.missed_anomalies)
             with col3:
-                st.metric("Precision", f"{metrics.precision:.3f}")
+                st.metric("False Positives (FP)", metrics.false_alarms)
             with col4:
                 st.metric("NAB Score", f"{metrics.nab_score:.1f}")
             
@@ -705,7 +716,7 @@ def main():
             
             # Summary table
             summary_data = {
-                'Metric': ['Correct Detections', 'Missed Anomalies', 'False Alarms', 'Recall', 'Precision', 'F1-Score', 'Execution Time'],
+                'Metric': ['True Positives (TP)', 'False Negatives (FN)', 'False Positives (FP)', 'Recall', 'Precision', 'F1-Score', 'Execution Time'],
                 'Value': [
                     f"{metrics.detected_anomalies}/{metrics.total_anomalies}",
                     metrics.missed_anomalies,

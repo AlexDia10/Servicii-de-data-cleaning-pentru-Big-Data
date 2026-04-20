@@ -155,7 +155,10 @@ class Benchmark:
         """
         Evaluate detections using NAB interval comparison.
         
-        Metric: A detected anomaly is CORRECT if it falls within a NAB interval
+        Logica:
+        - Interval cu >= 1 detecție în interior → TP
+        - Interval fără detecții → FN
+        - Detecție în afara tuturor intervalelor → FP
         
         Args:
             anomaly_indices: Indices of detected anomalies (sorted)
@@ -169,58 +172,66 @@ class Benchmark:
         if not isinstance(anomaly_indices, np.ndarray):
             anomaly_indices = np.array(anomaly_indices)
         
-        # Convert anomaly indices to binary labels
-        y_pred = np.zeros(total_samples, dtype=int)
-        y_pred[anomaly_indices] = 1
+        # Compute TP and FN per interval
+        tp = 0  # Intervale cu cel puțin o detecție
+        fn = 0  # Intervale fără detecții
         
-        # Convert NAB intervals to binary labels
-        y_true = np.zeros(total_samples, dtype=int)
         for start, end in nab_intervals:
-            if start < total_samples and end <= total_samples:
-                y_true[start:end] = 1
+            # Verifică dacă există detecții în interval [start, end)
+            detections_in_interval = np.sum((anomaly_indices >= start) & (anomaly_indices < end))
+            
+            if detections_in_interval > 0:
+                tp += 1
+            else:
+                fn += 1
         
-        # Count correct detections
-        detections_in_intervals = 0
+        # Compute FP: detecții în afara tuturor intervalelor
+        fp = 0
         for idx in anomaly_indices:
+            in_any_interval = False
             for start, end in nab_intervals:
                 if start <= idx < end:
-                    detections_in_intervals += 1
+                    in_any_interval = True
                     break
+            if not in_any_interval:
+                fp += 1
+        
+        # Compute TN (pentru completitudine)
+        total_anomaly_coverage = sum(end - start for start, end in nab_intervals)
+        tn = total_samples - total_anomaly_coverage - fp
         
         # Calculate metrics
-        metrics = calculate_metrics(y_true, y_pred)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
         
-        n_true_anomalies = len(nab_intervals)
-        n_detected = len(anomaly_indices)
-        n_false_alarms = n_detected - detections_in_intervals
-        n_missed = n_true_anomalies - detections_in_intervals
-        
-        # Calculate NAB score
-        nab_score, _ = self.scorer.score(y_true, y_pred)
+        # Calculate NAB-like score
+        nab_score = max(0, 100 - (0.11 * fp + 1.0 * fn))
         
         bench_metrics = BenchmarkMetrics(
             algorithm="NAB Interval Based",
-            precision=metrics['precision'],
-            recall=metrics['recall'],
-            f1_score=metrics['f1_score'],
-            false_positive_rate=metrics['false_positive_rate'],
+            precision=precision,
+            recall=recall,
+            f1_score=f1,
+            false_positive_rate=fpr,
             detection_delay_samples=0.0,
             detection_delay_seconds=0.0,
             nab_score=nab_score,
             execution_time=execution_time,
-            total_anomalies=n_true_anomalies,
-            detected_anomalies=detections_in_intervals,
-            missed_anomalies=n_missed,
-            false_alarms=n_false_alarms
+            total_anomalies=len(nab_intervals),
+            detected_anomalies=tp,  # TP = intervale detectate
+            missed_anomalies=fn,    # FN = intervale ratate
+            false_alarms=fp         # FP = detecții false
         )
         
         self.results["NAB_Interval_Based"] = bench_metrics
         
         self.logger.info(
             f"NAB Interval Evaluation: "
-            f"Correct={detections_in_intervals}/{n_detected}, "
-            f"False Alarms={n_false_alarms}, "
-            f"F1={bench_metrics.f1_score:.3f}"
+            f"TP={tp}, FN={fn}, FP={fp} | "
+            f"Precision={precision:.3f}, Recall={recall:.3f}, "
+            f"F1={f1:.3f}, NAB={nab_score:.1f}"
         )
         
         return bench_metrics
