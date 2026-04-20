@@ -49,30 +49,36 @@ class DataLoader:
     
     def list_nab_datasets(self) -> List[str]:
         """
-        List all available NAB datasets.
+        List all available NAB datasets with relative paths.
         
         Returns:
-            List of dataset names
+            List of dataset paths: dossier/dataset_name (without .csv)
         """
         if not self.data_dir.exists():
             logger.warning(f"NAB data directory not found: {self.data_dir}")
             return []
         
-        datasets = []
+        datasets = {}
+        # Subdirectories
         for subdir in self.data_dir.iterdir():
             if subdir.is_dir():
-                datasets.extend([f.stem for f in subdir.glob("*.csv")])
+                for csv_file in subdir.glob("*.csv"):
+                    relative_path = f"{subdir.name}/{csv_file.stem}"
+                    datasets[relative_path] = relative_path
         
-        datasets.extend([f.stem for f in self.data_dir.glob("*.csv")])
+        # Root directory
+        for csv_file in self.data_dir.glob("*.csv"):
+            datasets[csv_file.stem] = csv_file.stem
+        
         logger.info(f"Found {len(datasets)} NAB datasets")
-        return sorted(set(datasets))
+        return sorted(datasets.values())
     
     def load_csv(self, filepath: str) -> pd.DataFrame:
         """
         Load CSV file with automatic type inference.
         
         Args:
-            filepath: Path to CSV file
+            filepath: Path to CSV file (can be relative like "realKnownCause/nyc_taxi")
             
         Returns:
             Loaded DataFrame
@@ -83,15 +89,28 @@ class DataLoader:
         """
         file_path = Path(filepath)
         
-        if not file_path.exists():
-            # Try to find in NAB data directory
-            if self.data_dir.exists():
-                for subdir in self.data_dir.iterdir():
-                    if subdir.is_dir():
-                        candidate = subdir / f"{filepath}.csv"
-                        if candidate.exists():
-                            file_path = candidate
-                            break
+        # If filepath not absolute, try to find in NAB data directory
+        if not file_path.is_absolute():
+            if "/" in filepath:
+                # Relative path with subdirectory
+                candidate = self.data_dir / f"{filepath}.csv"
+                if candidate.exists():
+                    file_path = candidate
+            else:
+                # Just filename, search subdirectories
+                if self.data_dir.exists():
+                    for subdir in self.data_dir.iterdir():
+                        if subdir.is_dir():
+                            candidate = subdir / f"{filepath}.csv"
+                            if candidate.exists():
+                                file_path = candidate
+                                break
+        
+        # Try root directory if still not found
+        if not file_path.exists() and not file_path.is_absolute():
+            candidate = self.data_dir / f"{filepath}.csv"
+            if candidate.exists():
+                file_path = candidate
         
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {filepath}")

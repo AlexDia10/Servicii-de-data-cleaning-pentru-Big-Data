@@ -646,7 +646,7 @@ def main():
                                 dataset_name = st.session_state.get('current_dataset', None)
                                 
                                 if dataset_name:
-                                    nab_intervals = nab.get_anomaly_intervals(dataset_name)
+                                    nab_intervals = nab.get_anomaly_intervals(dataset_name, df)
                                     
                                     if nab_intervals:
                                         # Run detection
