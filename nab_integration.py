@@ -143,6 +143,29 @@ class NABIntegration:
             "timestamp_range": f"{data['timestamp'].min()} to {data['timestamp'].max()}"
         }
     
+    def get_anomaly_intervals(self, dataset_name: str) -> List[Tuple[int, int]]:
+        """
+        Extrage intervalele de anomalii pentru un dataset din NAB labels.
+        
+        Args:
+            dataset_name: Numele setului de date
+            
+        Returns:
+            Lista de tuple (start_index, end_index) pentru fiecare interval anomalie
+        """
+        try:
+            labels = self.load_labels()
+            dataset_labels = labels.get(dataset_name, [])
+            
+            if isinstance(dataset_labels, list):
+                # Format: lista de intervale [start, end]
+                return [(int(interval[0]), int(interval[1])) for interval in dataset_labels]
+            else:
+                return []
+        except Exception as e:
+            print(f"Error loading anomaly intervals: {e}")
+            return []
+    
     def list_detectors(self) -> List[str]:
         """
         Listează detectori disponibili în NAB

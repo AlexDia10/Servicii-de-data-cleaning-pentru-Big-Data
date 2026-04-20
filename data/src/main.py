@@ -61,7 +61,7 @@ def run_simple_test():
     mean = stats["mean"]
     std = stats["std"]
     
-    print(f"📊 Statistici:")
+    print(f" Statistici:")
     print(f"   Media: {mean:.2f}")
     print(f"   Deviație standard: {std:.2f}")
     print(f"   Prag anomalie (mean ± 1*std): {mean-std:.2f} - {mean+std:.2f}")
@@ -69,7 +69,7 @@ def run_simple_test():
     # Detectare anomalii
     anomalies = df.filter(spark_abs(col("value") - mean) > 1 * std)
     
-    print(f"\n🔍 Anomalii detectate:")
+    print(f"\n Anomalii detectate:")
     anomalies.show()
     
     spark.stop()
@@ -86,13 +86,13 @@ def run_nab_test():
         
         # Afișează informații NAB
         datasets = nab.get_available_datasets()
-        print(f"✅ NAB Integration Active")
+        print(f" NAB Integration Active")
         print(f"   Total datasets: {len(datasets)}")
         print(f"   Data directory: {nab.data_dir}")
         print(f"   Labels directory: {nab.labels_dir}")
         
         if datasets:
-            print(f"\n📂 Primele datasetsuri disponibile:")
+            print(f"\n Primele datasetsuri disponibile:")
             for i, dataset in enumerate(datasets[:5], 1):
                 try:
                     stats = nab.get_dataset_statistics(dataset)
@@ -104,7 +104,7 @@ def run_nab_test():
         
         return True
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f" Error: {e}")
         return False
 
 
@@ -119,12 +119,12 @@ def run_spark_nab_detector():
         
         datasets = detector.nab.get_available_datasets()
         if not datasets:
-            print("❌ No datasets found!")
+            print(" No datasets found!")
             return False
         
         # Testează pe primul dataset
         dataset_name = datasets[0]
-        print(f"✅ Testing on dataset: {dataset_name}\n")
+        print(f" Testing on dataset: {dataset_name}\n")
         
         # Afișează statistici
         detector.get_statistics(dataset_name)
@@ -136,7 +136,7 @@ def run_spark_nab_detector():
         
         return True
     except Exception as e:
-        print(f"⚠️  Note: {e}")
+        print(f"️  Note: {e}")
         print("   (Aceasta este așteptat dacă Spark nu este complet configurate)")
         return False
 
@@ -152,7 +152,7 @@ def main():
     try:
         run_simple_test()
     except Exception as e:
-        print(f"❌ Error în TEST 1: {e}")
+        print(f" Error în TEST 1: {e}")
     
     # TEST 2: NAB Integration test
     nab_ok = run_nab_test()
@@ -162,10 +162,10 @@ def main():
         try:
             run_spark_nab_detector()
         except Exception as e:
-            print(f"⚠️  Spark+NAB test skipped: {e}")
+            print(f"️  Spark+NAB test skipped: {e}")
     
     print("\n" + "="*70)
-    print("✅ Testele s-au completat!")
+    print(" Testele s-au completat!")
     print("="*70 + "\n")
 
 

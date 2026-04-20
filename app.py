@@ -37,7 +37,7 @@ def print_banner():
 
 def detect_command(args):
     """Run anomaly detection on a dataset."""
-    print(f"\n📂 Loading data from: {args.input}")
+    print(f"\n Loading data from: {args.input}")
     
     loader = DataLoader()
     try:
@@ -47,16 +47,16 @@ def detect_command(args):
             normalization_method=args.norm_method
         )
     except FileNotFoundError:
-        print(f"❌ Error: File not found: {args.input}")
+        print(f"Error: File not found: {args.input}")
         return
     
     values = df['value'].values
-    print(f"✓ Loaded {len(df)} data points")
+    print(f"Loaded {len(df)} data points")
     
     # Initialize detection engine
     engine = AnomalyDetectionEngine()
     
-    print(f"\n🔍 Running {args.algorithm} detection...")
+    print(f"\nRunning {args.algorithm} detection...")
     
     # Run detection
     try:
@@ -65,11 +65,11 @@ def detect_command(args):
         else:
             results = {args.algorithm: engine.detect_single(args.algorithm, values)}
     except Exception as e:
-        print(f"❌ Error during detection: {e}")
+        print(f"Error during detection: {e}")
         return
     
     # Display results
-    print("\n📊 RESULTS:")
+    print("\nRESULTS:")
     print("=" * 70)
     
     for algo_name, result in results.items():
@@ -84,7 +84,7 @@ def detect_command(args):
     
     # Save results if requested
     if args.output:
-        print(f"\n💾 Saving results to: {args.output}")
+        print(f"\n Saving results to: {args.output}")
         
         df_results = df.copy()
         for algo_name, result in results.items():
@@ -92,12 +92,12 @@ def detect_command(args):
             df_results[f'{algo_name}_score'] = result.scores
         
         df_results.to_csv(args.output, index=False)
-        print("✓ Results saved")
+        print("Results saved")
 
 
 def benchmark_command(args):
     """Run benchmarking tests."""
-    print("\n⏱️  BENCHMARKING MODE")
+    print("\nBENCHMARKING MODE")
     print("=" * 70)
     
     loader = DataLoader()
@@ -105,13 +105,13 @@ def benchmark_command(args):
     try:
         df = loader.preprocess(args.input)
     except FileNotFoundError:
-        print(f"❌ Error: File not found: {args.input}")
+        print(f" Error: File not found: {args.input}")
         return
     
-    print(f"✓ Loaded {len(df)} data points")
+    print(f" Loaded {len(df)} data points")
     
     # Run all algorithms
-    print("\n🔍 Running anomaly detection algorithms...")
+    print("\n Running anomaly detection algorithms...")
     
     engine = AnomalyDetectionEngine()
     values = df['value'].values
@@ -128,10 +128,10 @@ def benchmark_command(args):
         results[algo_name] = result
         start_times[algo_name] = elapsed
         
-        print(f"  ✓ {algo_name}: {elapsed:.3f}s")
+        print(f"   {algo_name}: {elapsed:.3f}s")
     
     # Display summary
-    print("\n📊 ALGORITHM COMPARISON:")
+    print("\n ALGORITHM COMPARISON:")
     print("-" * 70)
     print(f"{'Algorithm':<25} {'Anomalies':<12} {'Score Mean':<15} {'Time':<10}")
     print("-" * 70)
@@ -144,7 +144,7 @@ def benchmark_command(args):
     
     # Benchmark Spark if requested
     if args.spark:
-        print("\n⚡ SPARK DISTRIBUTED PROCESSING")
+        print("\n SPARK DISTRIBUTED PROCESSING")
         print("-" * 70)
         
         spark_engine = SparkEngine(master=f"local[{args.cores}]")
@@ -164,14 +164,14 @@ def benchmark_command(args):
                 print(f"  {op}: {t:.3f}s")
         
         except Exception as e:
-            print(f"⚠️  Error with Spark: {e}")
+            print(f"Error with Spark: {e}")
         finally:
             spark_engine.stop()
 
 
 def dashboard_command(args):
     """Launch Streamlit dashboard."""
-    print("\n🚀 Launching Streamlit Dashboard...")
+    print("\nLaunching Streamlit Dashboard...")
     print("=" * 70)
     
     import subprocess
@@ -185,12 +185,12 @@ def dashboard_command(args):
             "--logger.level=error"
         ])
     except Exception as e:
-        print(f"❌ Error launching dashboard: {e}")
+        print(f"Error launching dashboard: {e}")
 
 
 def list_datasets_command(args):
     """List available NAB datasets."""
-    print("\n📂 Available NAB Datasets:")
+    print("\n Available NAB Datasets:")
     print("=" * 70)
     
     loader = DataLoader()
@@ -338,9 +338,10 @@ def main():
             args.func(args)
         except Exception as e:
             logger.exception(f"Error executing command: {e}")
-            print(f"\n❌ Error: {e}")
+            print(f"\nError: {e}")
             sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
+

@@ -71,7 +71,8 @@ class RollingStatsZScore(AnomalyDetector):
         self,
         data: np.ndarray,
         threshold: float = 2.5,
-        min_periods: int = None
+        min_periods: int = None,
+        window_size: int = None
     ) -> AnomalyResult:
         """
         Detect anomalies using rolling statistics.
@@ -80,12 +81,16 @@ class RollingStatsZScore(AnomalyDetector):
             data: Time series data
             threshold: Z-score threshold for anomaly (default: 2.5)
             min_periods: Minimum periods for rolling calculation
+            window_size: Override window size if provided
             
         Returns:
             AnomalyResult with labels and scores
         """
+        # Use provided window_size or instance value
+        window = window_size if window_size is not None else self.window_size
+        
         if min_periods is None:
-            min_periods = self.window_size // 2
+            min_periods = window // 2
         
         self.logger.info(
             f"Running {self.name}: window={self.window_size}, threshold={threshold}"
@@ -96,13 +101,13 @@ class RollingStatsZScore(AnomalyDetector):
         
         # Calculate rolling statistics
         rolling_mean = series.rolling(
-            window=self.window_size,
+            window=window,
             min_periods=min_periods,
             center=True
         ).mean()
         
         rolling_std = series.rolling(
-            window=self.window_size,
+            window=window,
             min_periods=min_periods,
             center=True
         ).std()
@@ -128,7 +133,7 @@ class RollingStatsZScore(AnomalyDetector):
             thresholds={'z_score': threshold},
             algorithm=self.name,
             parameters={
-                'window_size': self.window_size,
+                'window_size': window,
                 'min_periods': min_periods,
                 'threshold': threshold
             }
@@ -166,7 +171,8 @@ class PredictionErrorAnomaly(AnomalyDetector):
         self,
         data: np.ndarray,
         threshold: float = 3.0,
-        smoothing_window: int = 5
+        smoothing_window: int = 5,
+        forecast_window: int = None
     ) -> AnomalyResult:
         """
         Detect anomalies using prediction errors.
@@ -175,12 +181,16 @@ class PredictionErrorAnomaly(AnomalyDetector):
             data: Time series data
             threshold: Standard deviation multiplier for error threshold
             smoothing_window: Window for smoothing error signal
+            forecast_window: Override forecast window if provided
             
         Returns:
             AnomalyResult with labels and scores
         """
+        # Use provided forecast_window or instance value
+        fw = forecast_window if forecast_window is not None else self.forecast_window
+        
         self.logger.info(
-            f"Running {self.name}: forecast_window={self.forecast_window}, "
+            f"Running {self.name}: forecast_window={fw}, "
             f"threshold={threshold}"
         )
         
@@ -188,10 +198,10 @@ class PredictionErrorAnomaly(AnomalyDetector):
         
         # Generate predictions using moving average
         predictions = np.zeros_like(data)
-        predictions[:self.forecast_window] = data[:self.forecast_window].mean()
+        predictions[:fw] = data[:fw].mean()
         
-        for i in range(self.forecast_window, len(data)):
-            predictions[i] = data[i - self.forecast_window:i].mean()
+        for i in range(fw, len(data)):
+            predictions[i] = data[i - fw:i].mean()
         
         # Calculate prediction errors
         errors = np.abs(data - predictions)
@@ -224,7 +234,7 @@ class PredictionErrorAnomaly(AnomalyDetector):
             thresholds={'error': error_threshold},
             algorithm=self.name,
             parameters={
-                'forecast_window': self.forecast_window,
+                'forecast_window': fw,
                 'smoothing_window': smoothing_window,
                 'threshold': threshold,
                 'error_mean': float(error_mean),
@@ -276,7 +286,10 @@ class HybridAnomalyScore(AnomalyDetector):
         zscore_threshold: float = 2.0,
         trend_threshold: float = 0.5,
         volatility_threshold: float = 2.0,
-        weights: Tuple[float, float, float] = (0.5, 0.3, 0.2)
+        weights: Tuple[float, float, float] = (0.5, 0.3, 0.2),
+        window_size: int = None,
+        trend_window: int = None,
+        volatility_window: int = None
     ) -> AnomalyResult:
         """
         Detect anomalies using hybrid scoring.
@@ -287,10 +300,18 @@ class HybridAnomalyScore(AnomalyDetector):
             trend_threshold: Trend change threshold
             volatility_threshold: Volatility spike threshold
             weights: Weights for [z_score, trend, volatility]
+            window_size: Override window size if provided
+            trend_window: Override trend window if provided
+            volatility_window: Override volatility window if provided
             
         Returns:
             AnomalyResult with labels and scores
         """
+        # Use provided windows or instance values
+        ws = window_size if window_size is not None else self.window_size
+        tw = trend_window if trend_window is not None else self.trend_window
+        vw = volatility_window if volatility_window is not None else self.volatility_window
+        
         self.logger.info(f"Running {self.name} with weights: {weights}")
         
         series = pd.Series(data)
@@ -298,14 +319,14 @@ class HybridAnomalyScore(AnomalyDetector):
         
         # 1. Z-Score component
         rolling_mean = series.rolling(
-            window=self.window_size,
-            min_periods=self.window_size // 2,
+            window=ws,
+            min_periods=ws // 2,
             center=True
         ).mean()
         
         rolling_std = series.rolling(
-            window=self.window_size,
-            min_periods=self.window_size // 2,
+            window=ws,
+            min_periods=ws // 2,
             center=True
         ).std()
         
@@ -316,7 +337,7 @@ class HybridAnomalyScore(AnomalyDetector):
         z_scores_norm = np.minimum(z_scores / zscore_threshold, 1.0)
         
         # 2. Trend deviation component
-        trends = calculate_trend(data, window=self.trend_window)
+        trends = calculate_trend(data, window=tw)
         trend_changes = np.abs(np.gradient(trends))
         trend_changes_norm = np.minimum(
             trend_changes / trend_threshold, 1.0
@@ -324,8 +345,8 @@ class HybridAnomalyScore(AnomalyDetector):
         
         # 3. Volatility spike component
         volatility = series.rolling(
-            window=self.volatility_window,
-            min_periods=self.volatility_window // 2,
+            window=vw,
+            min_periods=vw // 2,
             center=True
         ).std().values
         

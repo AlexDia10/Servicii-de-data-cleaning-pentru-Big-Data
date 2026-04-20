@@ -30,7 +30,7 @@ logger = setup_logger(__name__)
 # Page configuration
 st.set_page_config(
     page_title="Anomaly Detection System",
-    page_icon="📊",
+    page_icon="chart",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -73,11 +73,11 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
     Returns:
         Tuple (data_source, algorithm_params, n_cores, window_size)
     """
-    st.sidebar.title("⚙️ Configuration")
+    st.sidebar.title("Configuration")
     st.sidebar.divider()
     
     # Data source selection
-    st.sidebar.subheader("📂 Data Source")
+    st.sidebar.subheader("Data Source")
     data_source = st.sidebar.radio(
         "Select data source:",
         options=["Upload CSV", "NAB Dataset"],
@@ -85,7 +85,7 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
     )
     
     # Algorithm selection
-    st.sidebar.subheader("🔍 Algorithm Settings")
+    st.sidebar.subheader("Algorithm Settings")
     algorithm = st.sidebar.selectbox(
         "Select algorithm:",
         options=[
@@ -147,12 +147,53 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
             value=2.0,
             step=0.1
         )
-        weights = st.sidebar.slider(
-            "Weight: [Z-Score, Trend, Volatility]",
-            min_value=0.0,
-            max_value=1.0,
-            value=(0.5, 0.3, 0.2)
-        )
+        
+        st.sidebar.markdown("**Weights Distribution:**")
+        col1, col2, col3 = st.sidebar.columns(3)
+        
+        with col1:
+            w_zscore = st.slider(
+                "Z-Score",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.5,
+                step=0.05,
+                key="w_zscore"
+            )
+        
+        with col2:
+            w_trend = st.slider(
+                "Trend",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.3,
+                step=0.05,
+                key="w_trend"
+            )
+        
+        with col3:
+            w_volatility = st.slider(
+                "Volatility",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.2,
+                step=0.05,
+                key="w_volatility"
+            )
+        
+        # Normalize weights to sum = 1
+        total_weight = w_zscore + w_trend + w_volatility
+        if total_weight > 0:
+            weights = (
+                w_zscore / total_weight,
+                w_trend / total_weight,
+                w_volatility / total_weight
+            )
+        else:
+            weights = (0.5, 0.3, 0.2)
+        
+        st.sidebar.info(f"Normalized: Z={weights[0]:.2f}, Trend={weights[1]:.2f}, Vol={weights[2]:.2f}")
+        
         algorithm_params = {
             'zscore_threshold': zscore_thresh,
             'algorithm': 'hybrid',
@@ -165,7 +206,7 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
         }
     
     # Spark settings
-    st.sidebar.subheader("⚡ Distributed Processing")
+    st.sidebar.subheader("Distributed Processing")
     use_spark = st.sidebar.checkbox("Use Spark", value=False)
     n_cores = st.sidebar.select_slider(
         "Number of Cores:",
@@ -177,7 +218,7 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
     algorithm_params['n_cores'] = n_cores
     
     # Normalization
-    st.sidebar.subheader("📊 Normalization")
+    st.sidebar.subheader("Normalization")
     normalize = st.sidebar.checkbox("Normalize Data", value=True)
     normalization_method = st.sidebar.selectbox(
         "Normalization Method:",
@@ -348,7 +389,7 @@ def main():
     initialize_session_state()
     
     # Header
-    st.title("📊 Advanced Anomaly Detection System")
+    st.title("Advanced Anomaly Detection System")
     st.markdown(
         "**Scalable time-series anomaly detection with multiple algorithms and "
         "Spark integration**"
@@ -369,10 +410,10 @@ def main():
     
     # Main content
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📂 Data",
-        "🔍 Detection",
-        "📈 Results",
-        "🏆 Benchmark"
+        "Data",
+        "Detection",
+        "Results",
+        "Benchmark"
     ])
     
     # TAB 1: DATA UPLOAD AND EXPLORATION
@@ -413,7 +454,8 @@ def main():
                             df = loader.preprocess(selected_dataset)
                             st.session_state.data = df
                             st.session_state.data_loaded = True
-                            st.success(f"✓ Loaded {len(df)} rows from {selected_dataset}")
+                            st.session_state.current_dataset = selected_dataset
+                            st.success(f"Loaded {len(df)} rows from {selected_dataset}")
                     except Exception as e:
                         st.error(f"Error loading dataset: {e}")
         
@@ -469,7 +511,7 @@ def main():
                 )
             
             with col2:
-                if st.button("🚀 Run Detection", use_container_width=True):
+                if st.button("Run Detection", use_container_width=True):
                     with st.spinner("Processing..."):
                         try:
                             df = st.session_state.data
@@ -575,39 +617,109 @@ def main():
     # TAB 4: BENCHMARKING
     with tab4:
         st.subheader("Performance Benchmarking")
+        st.markdown("Compara detecția cu intervale NAB: dacă punctul ∈ interval NAB → corect")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📊 Run Benchmark", use_container_width=True):
+            if st.button("Run Benchmark", use_container_width=True):
                 with st.spinner("Benchmarking..."):
                     try:
-                        # Simulate benchmark (in real version, use actual data)
-                        cores_data = {
-                            1: 2.5,
-                            2: 1.4,
-                            4: 0.8,
-                            8: 0.6
-                        }
-                        
-                        fig = px.line(
-                            x=list(cores_data.keys()),
-                            y=list(cores_data.values()),
-                            markers=True,
-                            labels={'x': 'Cores', 'y': 'Execution Time (s)'}
-                        )
-                        
-                        st.session_state.benchmark_results = fig
-                        st.success("✓ Benchmark completed")
+                        if not st.session_state.data_loaded:
+                            st.error("Load data first")
+                        else:
+                            df = st.session_state.data
+                            values = df['value'].values
+                            
+                            # Load NAB intervals if available
+                            try:
+                                from nab_integration import NABIntegration
+                                nab = NABIntegration()
+                                
+                                # Extract dataset name from current data
+                                dataset_name = st.session_state.get('current_dataset', None)
+                                
+                                if dataset_name:
+                                    nab_intervals = nab.get_anomaly_intervals(dataset_name)
+                                    
+                                    if nab_intervals:
+                                        # Run detection
+                                        engine = AnomalyDetectionEngine()
+                                        result = engine.detect_single(
+                                            algorithm_params['algorithm'],
+                                            values,
+                                            **{k: v for k, v in algorithm_params.items()
+                                               if k not in ['algorithm', 'use_spark', 'n_cores',
+                                                           'normalize', 'normalization_method']}
+                                        )
+                                        
+                                        start_time = time.time()
+                                        # Re-run for timing
+                                        if algorithm_params['algorithm'] == 'ensemble':
+                                            result = engine.ensemble_vote(values)
+                                        exec_time = time.time() - start_time
+                                        
+                                        # Get detected anomalies
+                                        anomaly_indices = np.where(result.labels == 1)[0]
+                                        
+                                        # Evaluate with NAB intervals
+                                        benchmark = Benchmark()
+                                        metrics = benchmark.evaluate_with_nab_intervals(
+                                            anomaly_indices,
+                                            nab_intervals,
+                                            len(values),
+                                            exec_time
+                                        )
+                                        
+                                        st.session_state.benchmark_results = metrics
+                                        st.success(f"Benchmark completed: {metrics.detected_anomalies}/{metrics.total_anomalies} detections correct")
+                                    else:
+                                        st.warning("No NAB intervals found for this dataset")
+                                else:
+                                    st.warning("Use NAB dataset for benchmarking")
+                            except Exception as e:
+                                st.warning(f"NAB benchmark not available: {e}")
+                                # Fallback to simple benchmark
+                                st.info("Running simple performance test...")
+                                
                     except Exception as e:
                         st.error(f"Error: {e}")
+                        import traceback
+                        st.error(traceback.format_exc())
         
+        # Display results
         if st.session_state.benchmark_results:
-            st.plotly_chart(
-                st.session_state.benchmark_results,
-                use_container_width=True
-            )
+            metrics = st.session_state.benchmark_results
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Correct Detections", f"{metrics.detected_anomalies}/{metrics.total_anomalies}")
+            with col2:
+                st.metric("False Alarms", metrics.false_alarms)
+            with col3:
+                st.metric("Precision", f"{metrics.precision:.3f}")
+            with col4:
+                st.metric("NAB Score", f"{metrics.nab_score:.1f}")
+            
+            st.divider()
+            
+            # Summary table
+            summary_data = {
+                'Metric': ['Correct Detections', 'Missed Anomalies', 'False Alarms', 'Recall', 'Precision', 'F1-Score', 'Execution Time'],
+                'Value': [
+                    f"{metrics.detected_anomalies}/{metrics.total_anomalies}",
+                    metrics.missed_anomalies,
+                    metrics.false_alarms,
+                    f"{metrics.recall:.3f}",
+                    f"{metrics.precision:.3f}",
+                    f"{metrics.f1_score:.3f}",
+                    f"{metrics.execution_time:.3f}s"
+                ]
+            }
+            summary_df = pd.DataFrame(summary_data)
+            st.dataframe(summary_df, use_container_width=True)
 
 
 if __name__ == "__main__":
     main()
+

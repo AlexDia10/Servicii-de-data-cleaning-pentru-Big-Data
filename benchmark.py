@@ -145,6 +145,86 @@ class Benchmark:
         self.results = {}
         self.logger = logger
     
+    def evaluate_with_nab_intervals(
+        self,
+        anomaly_indices: np.ndarray,
+        nab_intervals: List[Tuple[int, int]],
+        total_samples: int,
+        execution_time: float
+    ) -> BenchmarkMetrics:
+        """
+        Evaluate detections using NAB interval comparison.
+        
+        Metric: A detected anomaly is CORRECT if it falls within a NAB interval
+        
+        Args:
+            anomaly_indices: Indices of detected anomalies (sorted)
+            nab_intervals: List of (start, end) tuples for ground truth anomalies
+            total_samples: Total number of samples
+            execution_time: Algorithm execution time
+            
+        Returns:
+            BenchmarkMetrics with interval-based comparison
+        """
+        if not isinstance(anomaly_indices, np.ndarray):
+            anomaly_indices = np.array(anomaly_indices)
+        
+        # Convert anomaly indices to binary labels
+        y_pred = np.zeros(total_samples, dtype=int)
+        y_pred[anomaly_indices] = 1
+        
+        # Convert NAB intervals to binary labels
+        y_true = np.zeros(total_samples, dtype=int)
+        for start, end in nab_intervals:
+            if start < total_samples and end <= total_samples:
+                y_true[start:end] = 1
+        
+        # Count correct detections
+        detections_in_intervals = 0
+        for idx in anomaly_indices:
+            for start, end in nab_intervals:
+                if start <= idx < end:
+                    detections_in_intervals += 1
+                    break
+        
+        # Calculate metrics
+        metrics = calculate_metrics(y_true, y_pred)
+        
+        n_true_anomalies = len(nab_intervals)
+        n_detected = len(anomaly_indices)
+        n_false_alarms = n_detected - detections_in_intervals
+        n_missed = n_true_anomalies - detections_in_intervals
+        
+        # Calculate NAB score
+        nab_score, _ = self.scorer.score(y_true, y_pred)
+        
+        bench_metrics = BenchmarkMetrics(
+            algorithm="NAB Interval Based",
+            precision=metrics['precision'],
+            recall=metrics['recall'],
+            f1_score=metrics['f1_score'],
+            false_positive_rate=metrics['false_positive_rate'],
+            detection_delay_samples=0.0,
+            detection_delay_seconds=0.0,
+            nab_score=nab_score,
+            execution_time=execution_time,
+            total_anomalies=n_true_anomalies,
+            detected_anomalies=detections_in_intervals,
+            missed_anomalies=n_missed,
+            false_alarms=n_false_alarms
+        )
+        
+        self.results["NAB_Interval_Based"] = bench_metrics
+        
+        self.logger.info(
+            f"NAB Interval Evaluation: "
+            f"Correct={detections_in_intervals}/{n_detected}, "
+            f"False Alarms={n_false_alarms}, "
+            f"F1={bench_metrics.f1_score:.3f}"
+        )
+        
+        return bench_metrics
+    
     def evaluate(
         self,
         y_true: np.ndarray,
