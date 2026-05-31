@@ -932,19 +932,6 @@ def main():
     
     # Header
     st.title("Advanced Anomaly Detection System")
-    st.markdown(
-        "**Scalable time-series anomaly detection with multiple algorithms and "
-        "Spark integration**"
-    )
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Dataset Size", "---", "rows")
-    with col2:
-        st.metric("Anomalies Found", "---", "detections")
-    with col3:
-        st.metric("Execution Time", "---", "seconds")
-    
     st.divider()
     
     # Sidebar controls
@@ -974,11 +961,12 @@ def main():
             st.session_state.benchmark_anomaly_indices = None
 
     # Main content
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Data",
         "Detection",
         "Results",
-        "Benchmark"
+        "Benchmark",
+        "Parallelism"
     ])
     
     # TAB 1: DATA UPLOAD AND EXPLORATION
@@ -995,10 +983,22 @@ def main():
                 )
                 
                 if uploaded_file:
+                    # Clear previous data immediately — if validation fails below,
+                    # the old dataset must not remain active.
+                    _prev_file = st.session_state.get('_uploaded_filename')
+                    if _prev_file != uploaded_file.name:
+                        st.session_state['_uploaded_filename'] = uploaded_file.name
+                        st.session_state.data_loaded            = False
+                        st.session_state.detection_results      = None
+                        st.session_state.benchmark_results      = None
+                        st.session_state.benchmark_nab_intervals  = None
+                        st.session_state.benchmark_anomaly_indices = None
+
                     try:
                         df = pd.read_csv(uploaded_file)
                         missing = [c for c in ['timestamp', 'value'] if c not in df.columns]
                         if missing:
+                            st.session_state.data_loaded = False
                             st.error(
                                 f"CSV-ul trebuie sa contina coloanele **timestamp** si **value**. "
                                 f"Coloane gasite: {list(df.columns)}. "
@@ -1009,6 +1009,7 @@ def main():
                             st.session_state.data = df
                             st.session_state.data_loaded = True
                     except Exception as e:
+                        st.session_state.data_loaded = False
                         st.error(f"Error loading file: {e}")
             
             else:  # NAB Dataset
@@ -1505,105 +1506,149 @@ def main():
             else:
                 st.info("Rulează benchmark-ul pentru a vedea comparația vizuală.")
 
-        # ── SCALABILITY ANALYSIS ──────────────────────────────────────
-        st.divider()
-        st.subheader("Scalability Analysis (Apache Spark)")
+    # TAB 5: PARALLELISM BENCHMARK
+    with tab5:
+        st.subheader("Isolation Forest — Paralelism prin ThreadPoolExecutor")
+
+        import multiprocessing as _mp
+        _n_phys = _mp.cpu_count()
+
+        _IF_TASKS     = 4
+        _IF_TREES_PER = 300
+        _IF_MAX_SAMP  = 2000
+        _IF_N_SAMPLES = 80_000
+
         st.markdown(
-            "Rulează Rolling Z-Score distribuit cu **1, 2, 4, 8 core-uri** "
-            "și măsoară speedup-ul real al Apache Spark."
+            "Benchmark-ul împarte construirea a **"
+            f"{_IF_TASKS * _IF_TREES_PER} arbori** în **{_IF_TASKS} task-uri independente** "
+            f"de câte **{_IF_TREES_PER} arbori** fiecare. "
+            "Rulează cu **1, 2, 4 thread-uri** (ThreadPoolExecutor — fără overhead de "
+            "pornire procese). Fiecare task construiește arbori complet independent — "
+            "*embarrassingly parallel*."
+        )
+        st.caption(
+            f"Date sintetice: **{_IF_N_SAMPLES:,} rânduri × 4 features** | "
+            f"max_samples per arbore: **{_IF_MAX_SAMP}** | "
+            f"Core-uri fizice: **{_n_phys}**"
         )
 
-        if st.button("Run Scalability Benchmark", use_container_width=True):
-            if not st.session_state.data_loaded:
-                st.error("Încarcă datele mai întâi.")
-            else:
-                scale_status = st.empty()
-                scale_progress = st.empty()
+        if st.button("Run Isolation Forest Parallelism Benchmark",
+                     use_container_width=True):
+            from sklearn.ensemble import IsolationForest as _IF
+            from concurrent.futures import ThreadPoolExecutor
 
-                df_scale = st.session_state.data
-                values_scale = df_scale['value'].values
+            if_status = st.empty()
+            if_prog   = st.empty()
 
-                try:
-                    from spark_engine import SparkRollingZScore
+            rng        = np.random.default_rng(42)
+            _vals      = rng.normal(50, 10, _IF_N_SAMPLES)
+            _s         = pd.Series(_vals)
+            _roll_mean = _s.rolling(20, min_periods=1).mean().values
+            _roll_std  = _s.rolling(20, min_periods=1).std().fillna(0).values
+            _roll_diff = _s.diff().abs().fillna(0).values
+            _feats     = np.column_stack([_vals, _roll_mean, _roll_std, _roll_diff])
 
-                    detector = SparkRollingZScore()
-                    cores_list = [1, 2, 4, 8]
-                    times = {}
+            def _build_trees(seed):
+                m = _IF(
+                    n_estimators=_IF_TREES_PER,
+                    max_samples=_IF_MAX_SAMP,
+                    contamination=0.01,
+                    random_state=seed,
+                    n_jobs=1
+                )
+                m.fit(_feats)
+                return seed
 
-                    for i, nc in enumerate(cores_list):
-                        scale_status.info(f"Rulează cu {nc} core-uri... ({i+1}/4)")
-                        with scale_progress.container():
-                            st.progress((i) / 4)
-                        times[nc] = None  # placeholder
-                        t = detector.benchmark_cores(
-                            values_scale,
-                            window_size=algorithm_params.get('window_size', 20),
-                            percentile=algorithm_params.get('percentile', 99.5),
-                            cores_list=[nc]
-                        )
-                        times[nc] = t[nc]
+            workers_list = [1, 2, 4]
+            if_times     = {}
 
-                    scale_progress.empty()
-                    scale_status.empty()
+            for i, nw in enumerate(workers_list):
+                if_status.info(f"Rulează {_IF_TASKS} task-uri cu {nw} thread-uri... ({i+1}/3)")
+                with if_prog.container():
+                    st.progress(i / 3)
+                t0 = time.time()
+                with ThreadPoolExecutor(max_workers=nw) as ex:
+                    list(ex.map(_build_trees, range(_IF_TASKS)))
+                if_times[nw] = round(time.time() - t0, 3)
 
-                    # Speedup și eficiență
-                    t1 = times[1]
-                    speedup    = {nc: round(t1 / t, 3) for nc, t in times.items() if t}
-                    efficiency = {nc: round(speedup[nc] / nc, 3) for nc in speedup}
+            if_prog.empty()
+            if_status.empty()
 
-                    st.session_state.scalability_results = {
-                        'times': times, 'speedup': speedup, 'efficiency': efficiency
-                    }
-                    st.success("Scalability benchmark completat!")
+            t1_if      = if_times[1]
+            speedup_if = {nw: round(t1_if / t, 3) for nw, t in if_times.items() if t > 0}
 
-                except Exception as e:
-                    scale_status.empty()
-                    scale_progress.empty()
-                    st.error(f"Eroare: {e}")
-                    import traceback
-                    st.error(traceback.format_exc())
-
-        if st.session_state.get('scalability_results'):
-            res = st.session_state.scalability_results
-            times_r    = res['times']
-            speedup_r  = res['speedup']
-            effic_r    = res['efficiency']
-
-            # Tabel cu rezultate
-            scale_df = pd.DataFrame({
-                'Cores': list(times_r.keys()),
-                'Time (s)': [round(v, 3) for v in times_r.values()],
-                'Speedup':  [speedup_r.get(k, '-') for k in times_r],
-                'Efficiency': [effic_r.get(k, '-') for k in times_r]
-            })
-            st.dataframe(scale_df, use_container_width=True)
-
-            # Grafic speedup
-            import plotly.graph_objects as go
-            cores_x   = list(speedup_r.keys())
-            speedup_y = list(speedup_r.values())
-            ideal_y   = cores_x  # speedup liniar ideal
-
-            fig_scale = go.Figure()
-            fig_scale.add_trace(go.Scatter(
-                x=cores_x, y=speedup_y,
-                mode='lines+markers', name='Speedup real',
-                line=dict(color='blue', width=2),
-                marker=dict(size=8)
-            ))
-            fig_scale.add_trace(go.Scatter(
-                x=cores_x, y=ideal_y,
-                mode='lines', name='Speedup ideal (liniar)',
-                line=dict(color='gray', dash='dash')
-            ))
-            fig_scale.update_layout(
-                title="Speedup Apache Spark — Rolling Z-Score",
-                xaxis_title="Număr de core-uri",
-                yaxis_title="Speedup (față de 1 core)",
-                template="plotly_white",
-                height=350
+            st.session_state['if_parallel_results'] = {
+                'times':     if_times,
+                'speedup':   speedup_if,
+                'n_tasks':   _IF_TASKS,
+                'trees_per': _IF_TREES_PER,
+                'max_samp':  _IF_MAX_SAMP,
+                'n_samples': _IF_N_SAMPLES,
+                'n_cores':   _n_phys,
+            }
+            st.success(
+                f"Benchmark completat: {_IF_TASKS} task-uri × {_IF_TREES_PER} arbori "
+                f"pe {_IF_N_SAMPLES:,} puncte."
             )
-            st.plotly_chart(fig_scale, use_container_width=True)
+
+        if st.session_state.get('if_parallel_results'):
+            ifr      = st.session_state['if_parallel_results']
+            workers  = list(ifr['times'].keys())
+            times_y  = list(ifr['times'].values())
+            spd_y    = [ifr['speedup'].get(w, 0) for w in workers]
+            x_labels = [f'{w} thread{"" if w == 1 else "s"}' for w in workers]
+
+            if_df = pd.DataFrame({
+                'Threads':             x_labels,
+                'Timp total (s)':      times_y,
+                'Speedup vs 1 thread': spd_y,
+            })
+            st.dataframe(if_df, use_container_width=True)
+
+            fig_if = go.Figure()
+            fig_if.add_trace(go.Bar(
+                x=x_labels, y=times_y,
+                marker_color=['#d9534f', '#f0ad4e', '#5cb85c'][:len(workers)],
+                text=[f"{t}s" for t in times_y],
+                textposition='outside',
+            ))
+            fig_if.update_layout(
+                title=(f"Isolation Forest — {ifr['n_tasks']} task-uri × "
+                       f"{ifr['trees_per']} arbori, {ifr['n_samples']:,} puncte sintetice"),
+                xaxis_title="Număr de thread-uri",
+                yaxis_title="Timp total (secunde)",
+                template="plotly_white", height=380, showlegend=False
+            )
+            st.plotly_chart(fig_if, use_container_width=True)
+
+            # y-axis starts just below 1 so even small improvements are visible
+            _min_spd = 0.9
+            _max_spd = 2.5
+
+            fig_spd = go.Figure()
+            fig_spd.add_trace(go.Scatter(
+                x=x_labels, y=spd_y, mode='lines+markers', name='Speedup real',
+                line=dict(color='green', width=2.5),
+                marker=dict(size=10, color='green', line=dict(color='darkgreen', width=1.5))
+            ))
+            # Annotate each point with its speedup value
+            for xi, yi in zip(x_labels, spd_y):
+                fig_spd.add_annotation(
+                    x=xi, y=yi, text=f"<b>{yi}x</b>",
+                    showarrow=False, yshift=14,
+                    font=dict(size=12, color='green')
+                )
+            fig_spd.update_layout(
+                title="Speedup Isolation Forest — embarrassingly parallel",
+                xaxis_title="Număr de thread-uri",
+                yaxis_title="Speedup față de execuție secvențială",
+                yaxis=dict(range=[_min_spd, _max_spd], dtick=0.25, gridcolor='#eeeeee'),
+                template="plotly_white",
+                height=420,
+                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+            )
+            st.plotly_chart(fig_spd, use_container_width=True)
+
 
 
 if __name__ == "__main__":
