@@ -207,16 +207,21 @@ class NABIntegration:
                         try:
                             start_ts = pd.to_datetime(interval[0])
                             end_ts = pd.to_datetime(interval[1])
-                            
-                            # Cauta indexul cel mai apropiat
-                            start_idx = (df['timestamp'] >= start_ts).idxmax()
-                            end_idx = (df['timestamp'] <= end_ts).idxmax()
-                            
-                            # Asigura-te ca end_idx > start_idx
-                            if end_idx > start_idx:
-                                intervals.append((int(start_idx), int(end_idx) + 1))
-                            else:
-                                intervals.append((int(start_idx), int(start_idx) + 1))
+
+                            # Primul index cu timestamp >= start_ts
+                            start_mask = df['timestamp'] >= start_ts
+                            if not start_mask.any():
+                                continue
+                            start_idx = int(start_mask.idxmax())
+
+                            # Ultimul index cu timestamp <= end_ts
+                            # idxmax() returnează PRIMUL True, nu ultimul — de aceea folosim index[-1]
+                            end_mask = df['timestamp'] <= end_ts
+                            if not end_mask.any():
+                                continue
+                            end_idx = int(end_mask[end_mask].index[-1])
+
+                            intervals.append((start_idx, end_idx + 1))
                         except Exception as e:
                             print(f"Error converting timestamps: {e}")
                             # Fallback: incearca direct indexing
@@ -266,7 +271,7 @@ def print_nab_info():
     try:
         nab = NABIntegration()
         
-        print("\n📊 Disponibile Database:")
+        print("\n[INFO] Available Databases:")
         datasets = nab.get_available_datasets()
         print(f"   Total: {len(datasets)} datasets")
         for i, dataset in enumerate(datasets[:5], 1):
@@ -281,7 +286,7 @@ def print_nab_info():
         if len(detectors) > 5:
             print(f"   ... și {len(detectors) - 5} mai mulți")
         
-        print("\n📈 Exemplu statistică dataset:")
+        print("\n[DATA] Dataset Statistics Example:")
         if datasets:
             stats = nab.get_dataset_statistics(datasets[0])
             for key, value in stats.items():
@@ -291,7 +296,7 @@ def print_nab_info():
         return nab
     
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         return None
 
 

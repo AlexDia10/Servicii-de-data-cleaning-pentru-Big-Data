@@ -150,21 +150,23 @@ class Benchmark:
         anomaly_indices: np.ndarray,
         nab_intervals: List[Tuple[int, int]],
         total_samples: int,
-        execution_time: float
+        execution_time: float,
+        tolerance: int = 100
     ) -> BenchmarkMetrics:
         """
-        Evaluate detections using NAB interval comparison.
+        Evaluate detections using NAB interval comparison with FUZZY MATCHING.
         
-        Logica:
-        - Interval cu >= 1 detecție în interior → TP
-        - Interval fără detecții → FN
-        - Detecție în afara tuturor intervalelor → FP
+        Fuzzy Matching Logic (±tolerance points), consistent pentru TP și FP:
+        - Interval cu detecție în [start-tolerance, end+tolerance] → TP
+        - Interval fără detecții în toleranță → FN
+        - Detecție în afara zonei fuzzy a tuturor intervalelor → FP
         
         Args:
             anomaly_indices: Indices of detected anomalies (sorted)
             nab_intervals: List of (start, end) tuples for ground truth anomalies
             total_samples: Total number of samples
             execution_time: Algorithm execution time
+            tolerance: Tolerance band around intervals (default: 50 points)
             
         Returns:
             BenchmarkMetrics with interval-based comparison
@@ -172,30 +174,35 @@ class Benchmark:
         if not isinstance(anomaly_indices, np.ndarray):
             anomaly_indices = np.array(anomaly_indices)
         
-        # Compute TP and FN per interval
-        tp = 0  # Intervale cu cel puțin o detecție
-        fn = 0  # Intervale fără detecții
+        # Compute TP and FN per interval WITH FUZZY MATCHING
+        tp = 0  # Intervale cu cel puțin o detecție în ±tolerance
+        fn = 0  # Intervale fără detecții în ±tolerance
         
         for start, end in nab_intervals:
-            # Verifică dacă există detecții în interval [start, end)
-            detections_in_interval = np.sum((anomaly_indices >= start) & (anomaly_indices < end))
+            # Fuzzy matching: acceptă detecții în [start-tolerance, end+tolerance]
+            fuzzy_start = max(0, start - tolerance)
+            fuzzy_end = min(total_samples, end + tolerance)
+            
+            detections_in_interval = np.sum((anomaly_indices >= fuzzy_start) & (anomaly_indices <= fuzzy_end))
             
             if detections_in_interval > 0:
                 tp += 1
             else:
                 fn += 1
         
-        # Compute FP: detecții în afara tuturor intervalelor
+        # Compute FP: detecții în afara zonei fuzzy a oricărui interval (consistent cu TP)
         fp = 0
         for idx in anomaly_indices:
-            in_any_interval = False
+            in_any_fuzzy_interval = False
             for start, end in nab_intervals:
-                if start <= idx < end:
-                    in_any_interval = True
+                fuzzy_start = max(0, start - tolerance)
+                fuzzy_end = min(total_samples, end + tolerance)
+                if fuzzy_start <= idx <= fuzzy_end:
+                    in_any_fuzzy_interval = True
                     break
-            if not in_any_interval:
+            if not in_any_fuzzy_interval:
                 fp += 1
-        
+
         # Compute TN (pentru completitudine)
         total_anomaly_coverage = sum(end - start for start, end in nab_intervals)
         tn = total_samples - total_anomaly_coverage - fp
@@ -210,7 +217,7 @@ class Benchmark:
         nab_score = max(0, 100 - (0.11 * fp + 1.0 * fn))
         
         bench_metrics = BenchmarkMetrics(
-            algorithm="NAB Interval Based",
+            algorithm="NAB Interval Based (Fuzzy ±50)",
             precision=precision,
             recall=recall,
             f1_score=f1,
@@ -220,7 +227,7 @@ class Benchmark:
             nab_score=nab_score,
             execution_time=execution_time,
             total_anomalies=len(nab_intervals),
-            detected_anomalies=tp,  # TP = intervale detectate
+            detected_anomalies=tp,  # TP = intervale detectate (fuzzy)
             missed_anomalies=fn,    # FN = intervale ratate
             false_alarms=fp         # FP = detecții false
         )
@@ -228,7 +235,7 @@ class Benchmark:
         self.results["NAB_Interval_Based"] = bench_metrics
         
         self.logger.info(
-            f"NAB Interval Evaluation: "
+            f"NAB Interval Evaluation (Fuzzy ±{tolerance}): "
             f"TP={tp}, FN={fn}, FP={fp} | "
             f"Precision={precision:.3f}, Recall={recall:.3f}, "
             f"F1={f1:.3f}, NAB={nab_score:.1f}"

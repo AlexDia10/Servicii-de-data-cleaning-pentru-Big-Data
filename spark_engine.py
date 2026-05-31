@@ -11,11 +11,13 @@ import numpy as np
 from typing import Optional, Dict, Tuple, List
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
+from pyspark.sql.window import Window
 from pyspark.sql.types import (
-    StructType, StructField, TimestampType, DoubleType
+    StructType, StructField, TimestampType, DoubleType, LongType
 )
 
 from utils import setup_logger
+from anomaly_algorithms import AnomalyResult
 
 
 logger = setup_logger(__name__)
@@ -395,6 +397,168 @@ class SparkEngine:
     def __del__(self):
         """Cleanup on deletion."""
         self.stop()
+
+
+class SparkRollingZScore:
+    """
+    Versiunea distribuită a Rolling Z-Score implementată cu Apache Spark.
+
+    Algoritmul este identic cu RollingStatsZScore din anomaly_algorithms.py,
+    dar calculul rolling mean/std rulează distribuit pe N core-uri prin
+    Spark Window functions, în loc de pandas rolling pe un singur core.
+    """
+
+    def __init__(self):
+        self.logger = setup_logger(__name__)
+
+    def _build_spark(self, n_cores: int) -> SparkSession:
+        """Oprește sesiunea existentă și creează una nouă cu N core-uri."""
+        existing = SparkSession.getActiveSession()
+        if existing:
+            existing.stop()
+        return (
+            SparkSession.builder
+            .appName("SparkRollingZScore")
+            .master(f"local[{n_cores}]")
+            .config("spark.sql.shuffle.partitions", str(n_cores * 2))
+            .config("spark.ui.showConsoleProgress", "false")
+            .getOrCreate()
+        )
+
+    def detect(
+        self,
+        data: np.ndarray,
+        window_size: int = 20,
+        percentile: float = 99.5,
+        n_cores: int = 4,
+        **kwargs
+    ) -> AnomalyResult:
+        """
+        Detectează anomalii folosind Rolling Z-Score distribuit pe Spark.
+
+        Args:
+            data: Array numpy cu valorile seriei temporale
+            window_size: Dimensiunea ferestrei pentru rolling mean/std
+            percentile: Percentila pentru pragul de detecție
+            n_cores: Numărul de core-uri Spark (local[N])
+
+        Returns:
+            AnomalyResult cu aceleași câmpuri ca algoritmii din anomaly_algorithms.py
+        """
+        self.logger.info(
+            f"SparkRollingZScore: window={window_size}, "
+            f"percentile={percentile}, cores={n_cores}"
+        )
+
+        spark = self._build_spark(n_cores)
+        spark.sparkContext.setLogLevel("ERROR")
+
+        # Crează DataFrame cu index explicit pentru ordonare
+        pdf = pd.DataFrame({"idx": np.arange(len(data), dtype=np.int64), "value": data.astype(float)})
+        sdf = spark.createDataFrame(pdf)
+
+        # Window spec: ultimele window_size rânduri (inclusiv curentul)
+        w = Window.orderBy("idx").rowsBetween(-(window_size - 1), 0)
+
+        sdf = (
+            sdf
+            .withColumn("rolling_mean", F.avg("value").over(w))
+            .withColumn("rolling_std",  F.stddev("value").over(w))
+            # std e null când fereastra are 1 element — înlocuim cu 0
+            .withColumn("rolling_std",  F.coalesce(F.col("rolling_std"), F.lit(0.0)))
+            .withColumn(
+                "zscore",
+                F.when(
+                    F.col("rolling_std") > 0,
+                    F.abs((F.col("value") - F.col("rolling_mean")) / F.col("rolling_std"))
+                ).otherwise(F.lit(0.0))
+            )
+        )
+
+        # Colectăm rezultatele ordonat după index
+        result_pdf = sdf.orderBy("idx").select("zscore").toPandas()
+        z_scores = result_pdf["zscore"].fillna(0.0).values
+
+        # Prag bazat pe percentilă (identic cu RollingStatsZScore)
+        threshold_value = float(np.nanpercentile(z_scores, percentile))
+
+        if threshold_value > 0:
+            anomaly_scores = np.minimum(z_scores / threshold_value, 1.0)
+        else:
+            anomaly_scores = np.zeros_like(z_scores)
+
+        labels = (anomaly_scores >= 1.0).astype(int)
+
+        return AnomalyResult(
+            labels=labels,
+            scores=anomaly_scores,
+            thresholds={
+                "method": "percentile",
+                "percentile": float(percentile),
+                "value": threshold_value
+            },
+            algorithm=f"Rolling Z-Score (Spark {n_cores} cores)",
+            parameters={
+                "window_size": window_size,
+                "percentile": percentile,
+                "n_cores": n_cores
+            }
+        )
+
+    def benchmark_cores(
+        self,
+        data: np.ndarray,
+        window_size: int = 20,
+        percentile: float = 99.5,
+        cores_list: List[int] = None
+    ) -> Dict[int, float]:
+        """
+        Rulează detecția cu 1, 2, 4, 8 core-uri și înregistrează timpii.
+
+        Args:
+            data: Array numpy cu datele
+            window_size: Dimensiunea ferestrei rolling
+            percentile: Percentila pentru prag
+            cores_list: Lista de core-uri de testat (default: [1, 2, 4, 8])
+
+        Returns:
+            Dict {n_cores: timp_executie_secunde}
+        """
+        if cores_list is None:
+            cores_list = [1, 2, 4, 8]
+
+        times = {}
+        pdf = pd.DataFrame({"idx": np.arange(len(data), dtype=np.int64), "value": data.astype(float)})
+
+        for n_cores in cores_list:
+            self.logger.info(f"Benchmarking cu {n_cores} core-uri...")
+            spark = self._build_spark(n_cores)
+            spark.sparkContext.setLogLevel("ERROR")
+
+            sdf = spark.createDataFrame(pdf)
+            w = Window.orderBy("idx").rowsBetween(-(window_size - 1), 0)
+
+            # Măsoară doar timpul de calcul (fără inițializarea sesiunii)
+            start = time.time()
+            sdf = (
+                sdf
+                .withColumn("rolling_mean", F.avg("value").over(w))
+                .withColumn("rolling_std",  F.coalesce(F.stddev("value").over(w), F.lit(0.0)))
+                .withColumn(
+                    "zscore",
+                    F.when(
+                        F.col("rolling_std") > 0,
+                        F.abs((F.col("value") - F.col("rolling_mean")) / F.col("rolling_std"))
+                    ).otherwise(F.lit(0.0))
+                )
+            )
+            sdf.select("zscore").collect()  # forțează execuția lazy
+            elapsed = time.time() - start
+
+            times[n_cores] = elapsed
+            self.logger.info(f"  {n_cores} cores: {elapsed:.3f}s")
+
+        return times
 
 
 if __name__ == "__main__":

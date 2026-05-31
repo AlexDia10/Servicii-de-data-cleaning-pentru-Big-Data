@@ -190,7 +190,7 @@ class SparkAnomalyDetector:
         results = {}
         
         # Z-score
-        print("📊 Z-Score Method (threshold=2.0):")
+        print("[DATA] Z-Score Method (threshold=2.0):")
         anomalies_zscore, mean, std = self.detect_anomalies_zscore(spark_df, threshold=2.0)
         count_zscore = anomalies_zscore.count()
         results["zscore"] = count_zscore
@@ -198,7 +198,7 @@ class SparkAnomalyDetector:
         print(f"   Media: {mean:.2f}, Std: {std:.2f}")
         
         # IQR
-        print("\n📊 IQR Method (multiplier=1.5):")
+        print("\n[DATA] IQR Method (multiplier=1.5):")
         anomalies_iqr, q1, q3, iqr = self.detect_anomalies_iqr(spark_df, multiplier=1.5)
         count_iqr = anomalies_iqr.count()
         results["iqr"] = count_iqr
@@ -206,7 +206,7 @@ class SparkAnomalyDetector:
         print(f"   Q1: {q1:.2f}, Q3: {q3:.2f}, IQR: {iqr:.2f}")
         
         # Windowed Z-score
-        print("\n📊 Windowed Z-Score (5-minute windows):")
+        print("\n[DATA] Windowed Z-Score (5-minute windows):")
         anomalies_windowed = self.detect_anomalies_windowed(
             spark_df, 
             window_size="5 minutes", 
@@ -224,7 +224,7 @@ class SparkAnomalyDetector:
     def get_statistics(self, dataset_name: str):
         """Afișează statistici despre dataset"""
         stats = self.nab.get_dataset_statistics(dataset_name)
-        print(f"\n📈 Statistici {dataset_name}:")
+        print(f"\n[STATS] Statistics {dataset_name}:")
         for key, value in stats.items():
             print(f"   {key}: {value}")
 
@@ -242,10 +242,10 @@ def main():
     datasets = detector.nab.get_available_datasets()
     
     if not datasets:
-        print("❌ No datasets found in NAB!")
+        print("[ERROR] No datasets found in NAB!")
         return
     
-    print(f"\n✅ Found {len(datasets)} datasets")
+    print(f"\n[OK] Found {len(datasets)} datasets")
     
     # Testează pe primele 2 datasetsuri
     for dataset_name in datasets[:2]:
@@ -253,9 +253,9 @@ def main():
             detector.get_statistics(dataset_name)
             detector.compare_methods(dataset_name)
         except Exception as e:
-            print(f"⚠️  Error processing {dataset_name}: {e}")
+            print(f"[ERROR] Error processing {dataset_name}: {e}")
     
-    print("\n✅ Detecția anomaliilor s-a completat!")
+    print("\n[OK] Detecția anomaliilor s-a completat!")
 
 
 if __name__ == "__main__":
