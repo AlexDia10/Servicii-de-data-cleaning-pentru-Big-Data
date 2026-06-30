@@ -1,0 +1,16 @@
+profile,algorithm,threshold,raw_score,nab_score,tp,fp,fn,null_raw,perfect_raw
+standard,rollingZScore,1.1,-130.0,2.2059,0,0,35717,-136.0,136.0
+standard,predictionError,1.1,-130.0,2.2059,0,0,35717,-136.0,136.0
+standard,hybridScore,1.0,-104.3969,11.6188,255,1175,35462,-136.0,136.0
+standard,isolationForest,1.0,8.0139,52.9463,426,273,35291,-136.0,136.0
+standard,meanShift,1.0,-22.4225,41.7564,89,151,35628,-136.0,136.0
+reward_low_FP,rollingZScore,1.1,-130.0,2.2059,0,0,35717,-136.0,136.0
+reward_low_FP,predictionError,1.1,-130.0,2.2059,0,0,35717,-136.0,136.0
+reward_low_FP,hybridScore,1.1,-130.0,2.2059,0,0,35717,-136.0,136.0
+reward_low_FP,isolationForest,1.0,-20.6582,42.4051,426,273,35291,-136.0,136.0
+reward_low_FP,meanShift,1.0,-38.3959,35.8838,89,151,35628,-136.0,136.0
+reward_low_FN,rollingZScore,1.0,-186.3996,20.9805,339,2099,35378,-272.0,136.0
+reward_low_FN,predictionError,1.0,-174.3815,23.9261,784,2141,34933,-272.0,136.0
+reward_low_FN,hybridScore,1.0,-153.3969,29.0694,255,1175,35462,-272.0,136.0
+reward_low_FN,isolationForest,1.0,-30.9861,59.072,426,273,35291,-272.0,136.0
+reward_low_FN,meanShift,1.0,-86.4225,45.4847,89,151,35628,-272.0,136.0

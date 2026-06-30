@@ -41,19 +41,19 @@
                     "min": 90.0,
                     "max": 99.9,
                     "default": 99.5,
-                    "step": 0.5
+                    "step": 0.1
                 },
                 "k_std": {
                     "min": 1.5,
                     "max": 4.0,
                     "default": 2.0,
-                    "step": 0.1
+                    "step": 0.05
                 },
                 "fixed_threshold": {
                     "min": 1.5,
                     "max": 5.0,
                     "default": 4.0,
-                    "step": 0.1
+                    "step": 0.05
                 }
             },
             "notes": "Percentile method more robust. Low percentile (90) = more sensitive, High (99) = fewer alarms."
@@ -70,7 +70,7 @@
             "advanced_mode": {
                 "forecast_window": {
                     "min": 3,
-                    "max": 20,
+                    "max": 50,
                     "default": 5,
                     "step": 1
                 },
@@ -82,19 +82,19 @@
                     "min": 90.0,
                     "max": 99.9,
                     "default": 99.5,
-                    "step": 0.5
+                    "step": 0.1
                 },
                 "k_std": {
                     "min": 1.5,
                     "max": 4.0,
                     "default": 2.0,
-                    "step": 0.1
+                    "step": 0.05
                 },
                 "fixed_threshold": {
                     "min": 2.0,
                     "max": 6.0,
                     "default": 4.5,
-                    "step": 0.1
+                    "step": 0.05
                 }
             },
             "notes": "Percentile method recommended. Works with trending data and captures sudden changes."
@@ -118,31 +118,31 @@
                     "min": 90.0,
                     "max": 99.9,
                     "default": 99.5,
-                    "step": 0.5
+                    "step": 0.1
                 },
                 "k_std": {
                     "min": 1.5,
                     "max": 4.0,
                     "default": 2.0,
-                    "step": 0.1
+                    "step": 0.05
                 },
                 "zscore_threshold": {
                     "min": 1.5,
                     "max": 4.5,
                     "default": 3.5,
-                    "step": 0.1
+                    "step": 0.05
                 },
                 "trend_threshold": {
                     "min": 0.5,
                     "max": 3.0,
                     "default": 1.2,
-                    "step": 0.1
+                    "step": 0.05
                 },
                 "volatility_threshold": {
                     "min": 1.5,
                     "max": 4.5,
                     "default": 3.5,
-                    "step": 0.1
+                    "step": 0.05
                 },
                 "weights": {
                     "zscore_weight": {
@@ -177,10 +177,10 @@
             },
             "advanced_mode": {
                 "contamination": {
-                    "min": 0.001,
+                    "min": 0.0005,
                     "max": 0.1,
                     "default": 0.01,
-                    "step": 0.001
+                    "step": 0.0005
                 },
                 "n_estimators": {
                     "min": 50,
@@ -196,6 +196,42 @@
                 }
             },
             "notes": "Detects contextual anomalies. Contamination = expected fraction of anomalies (0.01 = 1%). Uses rolling features for temporal context."
+        },
+        "mean_shift": {
+            "name": "Mean Shift Detector",
+            "description": "Detects abrupt level changes by comparing the means of two adjacent sliding windows",
+            "simple_mode": {
+                "window": 50,
+                "threshold_method": "adaptive_std",
+                "k_std": 3.0
+            },
+            "advanced_mode": {
+                "window": {
+                    "min": 10,
+                    "max": 200,
+                    "default": 50,
+                    "step": 5
+                },
+                "percentile": {
+                    "min": 90.0,
+                    "max": 99.9,
+                    "default": 99.0,
+                    "step": 0.1
+                },
+                "k_std": {
+                    "min": 1.5,
+                    "max": 5.0,
+                    "default": 3.0,
+                    "step": 0.1
+                },
+                "fixed_threshold": {
+                    "min": 1.0,
+                    "max": 10.0,
+                    "default": 3.0,
+                    "step": 0.1
+                }
+            },
+            "notes": "Best for step changes and regime shifts. Window = half-width of comparison zone. Larger window = more stable but less reactive to short transitions."
         }
     },
     "key_datasets": {
@@ -256,6 +292,92 @@
                 "order": 5,
                 "benchmark": {"rolling": 0.143, "hybrid": 0.400, "isolation_forest": 0.400},
                 "notes": "Hybrid and Isolation Forest tie (F1=0.40), both outperform Rolling. Interesting ML vs statistical comparison."
+            },
+            {
+                "id": "art_load_balancer_spikes",
+                "name": "Load Balancer Spikes",
+                "path": "artificialWithAnomaly/art_load_balancer_spikes",
+                "type": "Artificial With Anomaly",
+                "description": "Burst de spike-uri extreme intr-o fereastra de ~33 ore — exemplu clar de anomalie tip varf",
+                "recommended": true,
+                "order": 6,
+                "required_sensitivity": "High",
+                "notes": "NECESITA sensitivity=High (percentile=92, contamination=0.10). Fereastra de anomalie contine ~10% din date."
+            },
+            {
+                "id": "mean_shift_demo",
+                "name": "Demo Mean Shift (Schimbare de Nivel)",
+                "path": "artificialWithAnomaly/mean_shift_demo",
+                "type": "Custom Artificial",
+                "description": "5 segmente cu medii diferite (10→35→60→38→15) si zgomot gaussian — demonstreaza detectia schimbarilor de nivel",
+                "recommended": true,
+                "order": 7,
+                "benchmark": {
+                    "mean_shift": 0.890,
+                    "hybrid": null,
+                    "rolling": null,
+                    "isolation_forest": null
+                },
+                "simple_mode_algorithm": "Mean Shift Detector",
+                "simple_mode_sensitivity": "Medium",
+                "optimal_params": {
+                    "mean_shift": {"window": 30, "threshold_method": "adaptive_std", "k_std": 3.0}
+                },
+                "notes": "F1=0.89, FP=0 cu Mean Shift window=30, k=3. Dataset ideal pentru demonstrarea algoritmului Mean Shift."
+            },
+            {
+                "id": "simple_spike_demo",
+                "name": "Demo Spike-uri Izolate",
+                "path": "artificialWithAnomaly/simple_spike_demo",
+                "type": "Custom Artificial",
+                "description": "5 spike-uri izolate pe un baseline plat — dataset ideal pentru demonstrarea detectiei in Modul Simplu",
+                "recommended": true,
+                "order": 7,
+                "benchmark": {
+                    "hybrid": 1.000,
+                    "rolling": 1.000,
+                    "prediction_error": 1.000,
+                    "isolation_forest": 1.000
+                },
+                "simple_mode_sensitivity": "Medium",
+                "notes": "Toti algoritmii F1=1.00 cu sensitivitate Medium (k=3, IF cont=0.005). Dataset perfect pentru teza."
+            },
+            {
+                "id": "hybrid_demo",
+                "name": "Demo Hybrid (Toate Tipurile de Anomalii)",
+                "path": "artificialWithAnomaly/hybrid_demo",
+                "type": "Custom Artificial",
+                "description": "Dataset sintetic cu 5 tipuri distincte: spike, burst de volatilitate, schimbare de nivel, schimbare de trend si flatline — demonstreaza toate canalele Hybrid",
+                "recommended": true,
+                "order": 7,
+                "simple_mode_algorithm": "Hybrid Anomaly Score",
+                "simple_mode_sensitivity": "Medium",
+                "optimal_params": {
+                    "hybrid": {"threshold_method": "percentile", "percentile": 95, "weights": [0.5, 0.3, 0.2]}
+                },
+                "notes": "Dataset de demonstratie pentru teza: 1500 puncte, 5 anomalii de tipuri diferite (spike, volatilitate, mean shift, trend, flatline). Ideal pentru a prezenta avantajele algoritmului Hybrid."
+            },
+            {
+                "id": "test_consum_electric",
+                "name": "Consum Electric (Custom)",
+                "path": "artificialWithAnomaly/test_consum_electric",
+                "type": "Custom Artificial",
+                "description": "Date sintetice de consum electric cu 4 grupuri de anomalii clare — spike-uri, flatline si burst crescator",
+                "recommended": true,
+                "order": 7,
+                "benchmark": {
+                    "hybrid": 1.000,
+                    "rolling": 0.930,
+                    "isolation_forest": 0.790,
+                    "prediction_error": 0.730
+                },
+                "optimal_params": {
+                    "hybrid": {"threshold_method": "percentile", "percentile": 97},
+                    "rolling": {"window_size": 50, "threshold_method": "percentile", "percentile": 98.5},
+                    "prediction_error": {"forecast_window": 30, "threshold_method": "percentile", "percentile": 98},
+                    "isolation_forest": {"contamination": 0.02}
+                },
+                "notes": "Dataset custom: 1000 puncte, 5-min interval, 13 anomalii (1.3%). Hybrid F1=1.00, Rolling F1=0.93, IF F1=0.79, PredErr F1=0.73."
             }
         ]
     },
@@ -306,7 +428,17 @@
         "speed_6005": {
             "rolling": 0.143, "hybrid": 0.400, "isolation_forest": 0.400,
             "notes": "Hybrid ties Isolation Forest. Rolling significantly worse."
+        },
+        "test_consum_electric": {
+            "rolling": 0.930, "hybrid": 1.000, "isolation_forest": 0.790, "prediction_error": 0.730,
+            "optimal_params_used": "Hybrid pct=97; Rolling ws=50 pct=98.5; IF cont=0.02; PredErr fw=30 pct=98",
+            "notes": "Custom dataset. Hybrid perfect (F1=1.00). Rolling excellent (F1=0.93). All 4 algos work well."
         }
+    },
+    "sensitivity_levels": {
+        "Low":    {"threshold_method": "adaptive_std", "k_std": 4.0, "if_contamination": 0.002, "description": "Prag strict: 4σ deasupra mediei. Putine alarme false, dar poate rata spike-uri mici."},
+        "Medium": {"threshold_method": "adaptive_std", "k_std": 3.0, "if_contamination": 0.005, "description": "Prag 3σ (regula three-sigma). Echilibrat, recomandat pentru demonstratii."},
+        "High":   {"threshold_method": "adaptive_std", "k_std": 2.0, "if_contamination": 0.050, "description": "Prag 2σ. Detectie agresiva, mai multe alarme false — pentru date cu anomalii frecvente."}
     },
     "thesis_recommendations": {
         "gui_strategy": "Use Simple Mode as default (covers 80% of use cases). Advanced Mode for demonstrations.",

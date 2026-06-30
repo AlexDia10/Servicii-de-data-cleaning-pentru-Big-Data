@@ -79,7 +79,7 @@ def load_presets() -> dict:
     
     presets_file = Path(__file__).parent / 'presets.json'
     try:
-        with open(presets_file, 'r') as f:
+        with open(presets_file, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
         logger.warning(f"Could not load presets: {e}")
@@ -126,7 +126,7 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
     presets = st.session_state.presets
     
     # MODE SELECTOR (Simple vs Advanced)
-    st.sidebar.subheader("GUI Mode")
+    st.sidebar.subheader("Mode Selection")
     mode_col1, mode_col2 = st.sidebar.columns(2)
     
     with mode_col1:
@@ -143,15 +143,8 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
             st.session_state.gui_mode = 'advanced'
             st.rerun()
     
-    # Mode description
     if st.session_state.gui_mode == 'simple':
-        st.sidebar.info(
-            "**Simple Mode (Recommended)**\n\n"
-            "[OK] Pre-configured parameters\n"
-            "[OK] Consistent, reliable results\n"
-            "[OK] Perfect for thesis defense"
-        )
-        
+        st.sidebar.divider()
         # DETECTION SENSITIVITY (Simple Mode Only)
         st.sidebar.subheader("Detection Sensitivity")
         sensitivity_options = ["Low (fewer false alarms)", "Medium (balanced)", "High (detect more)"]
@@ -160,24 +153,16 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
             options=sensitivity_options,
             index=1  # Medium is default
         )
-        
-        sensitivity_percentiles = {
-            "Low (fewer false alarms)": 99.9,
-            "Medium (balanced)": 99.5,
-            "High (detect more)": 99
+
+        sensitivity_k_map = {
+            "Low (fewer false alarms)": 4.0,
+            "Medium (balanced)": 3.0,
+            "High (detect more)": 2.0
         }
-        percentile_value = sensitivity_percentiles[sensitivity]
-        
+        k_std_value = sensitivity_k_map[sensitivity]
+
         st.sidebar.markdown(
-            f"**Percentile Threshold**: {percentile_value}th percentile\n\n"
-            f"*Detects anomalies above {100-percentile_value}% of values*"
-        )
-    else:
-        st.sidebar.warning(
-            "**Advanced Mode (Expert)**\n\n"
-            "[!] Modify algorithm parameters\n"
-            "[!] Access all 58 NAB datasets\n"
-            "[!] For research & experimentation"
+            f"**Threshold**: mean + **{k_std_value}σ** (adaptive)"
         )
     
     st.sidebar.divider()
@@ -200,16 +185,12 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
     st.sidebar.subheader("Algorithm")
     
     if st.session_state.gui_mode == 'simple':
-        # SIMPLE MODE: Show recommended algorithm first, but selection available
-        st.sidebar.markdown(
-            "**Recommended:** Hybrid Score (best F1=0.50)\n\n"
-            "Alternatively, select:"
-        )
         algorithm_options = [
-            "Hybrid Anomaly Score (RECOMMENDED)",
             "Rolling Stats Z-Score",
             "Prediction Error",
-            "Isolation Forest (ML)"
+            "Hybrid Anomaly Score",
+            "Mean Shift Detector",
+            "Isolation Forest"
         ]
         algorithm = st.sidebar.selectbox(
             "Select algorithm:",
@@ -224,6 +205,8 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
             algorithm = "Rolling Stats Z-Score"
         elif "Isolation" in algorithm:
             algorithm = "Isolation Forest"
+        elif "Mean Shift" in algorithm:
+            algorithm = "Mean Shift Detector"
         else:
             algorithm = "Prediction Error"
         
@@ -234,44 +217,40 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
             preset = presets['algorithms']['rolling_stats']['simple_mode']
             st.sidebar.markdown(
                 f"- Window Size: **{preset['window_size']}**\n"
-                f"- Threshold Method: **Percentile ({percentile_value})**"
+                f"- Threshold: **mean + {k_std_value}σ** (adaptive)"
             )
             algorithm_params = {
-                'threshold_method': 'percentile',
-                'percentile': percentile_value,
+                'threshold_method': 'adaptive_std',
+                'k_std': k_std_value,
                 'algorithm': 'rolling_stats',
                 'window_size': preset['window_size']
             }
-        
+
         elif algorithm == "Prediction Error":
             preset = presets['algorithms']['prediction_error']['simple_mode']
             st.sidebar.markdown(
                 f"- Forecast Window: **{preset['forecast_window']}**\n"
-                f"- Threshold Method: **Percentile ({percentile_value})**"
+                f"- Threshold: **mean + {k_std_value}σ** (adaptive)"
             )
             algorithm_params = {
-                'threshold_method': 'percentile',
-                'percentile': percentile_value,
+                'threshold_method': 'adaptive_std',
+                'k_std': k_std_value,
                 'algorithm': 'prediction_error',
                 'forecast_window': preset['forecast_window']
             }
-        
+
         elif algorithm == "Isolation Forest":
             preset = presets['algorithms']['isolation_forest']['simple_mode']
             contamination_map = {
-                "Low (fewer false alarms)": 0.005,
-                "Medium (balanced)": 0.01,
-                "High (detect more)": 0.03
+                "Low (fewer false alarms)": 0.002,
+                "Medium (balanced)": 0.005,
+                "High (detect more)": 0.05
             }
             contamination_value = contamination_map[sensitivity]
             st.sidebar.markdown(
                 f"- Contamination: **{contamination_value}** ({sensitivity})\n"
                 f"- Trees: **{preset['n_estimators']}**\n"
                 f"- Window: **{preset['window_size']}**"
-            )
-            st.sidebar.info(
-                "Isolation Forest uses machine learning to detect "
-                "contextual anomalies, not just statistical spikes."
             )
             algorithm_params = {
                 'contamination': contamination_value,
@@ -280,16 +259,28 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                 'algorithm': 'isolation_forest'
             }
 
+        elif algorithm == "Mean Shift Detector":
+            preset = presets['algorithms']['mean_shift']['simple_mode']
+            st.sidebar.markdown(
+                f"- Window: **{preset['window']}** puncte\n"
+                f"- Threshold: **mean + {k_std_value}σ** (adaptive)"
+            )
+            algorithm_params = {
+                'threshold_method': 'adaptive_std',
+                'k_std': k_std_value,
+                'window': preset['window'],
+                'algorithm': 'mean_shift'
+            }
+
         else:  # Hybrid (recommended)
             preset = presets['algorithms']['hybrid']['simple_mode']
             st.sidebar.markdown(
-                f"- Threshold Method: **Percentile ({percentile_value})**\n"
-                f"- Weights: **{preset['weights']}**\n"
-                f"- Sensitivity: **{sensitivity}**"
+                f"- Threshold: **mean + {k_std_value}σ** (adaptive)\n"
+                f"- Weights: **{preset['weights']}**"
             )
             algorithm_params = {
-                'threshold_method': 'percentile',
-                'percentile': percentile_value,
+                'threshold_method': 'adaptive_std',
+                'k_std': k_std_value,
                 'weights': preset['weights'],
                 'algorithm': 'hybrid'
             }
@@ -302,7 +293,8 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                 "Rolling Stats Z-Score",
                 "Prediction Error",
                 "Hybrid Anomaly Score",
-                "Isolation Forest (ML)"
+                "Mean Shift Detector",
+                "Isolation Forest"
             ]
         )
 
@@ -313,28 +305,31 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
             algorithm = "Prediction Error"
         elif "Isolation" in algorithm:
             algorithm = "Isolation Forest"
+        elif "Mean Shift" in algorithm:
+            algorithm = "Mean Shift Detector"
         else:
             algorithm = "Hybrid Anomaly Score"
         
         # THRESHOLD METHOD SELECTION (Advanced Mode)
-        st.sidebar.subheader("Threshold Configuration")
-        threshold_method = st.sidebar.radio(
-            "Threshold Method:",
-            options=["( ) Fixed threshold", "( ) Adaptive threshold"],
-            index=1  # Adaptive is default
-        )
-        
-        threshold_method_value = 'fixed' if 'Fixed' in threshold_method else 'adaptive_std'
-        use_percentile = False
-        
-        if 'Adaptive' in threshold_method:
-            threshold_type = st.sidebar.selectbox(
-                "Adaptive Method:",
-                options=["Percentile", "Mean + k * Std"],
-                index=0
+        # Isolation Forest nu foloseste prag — pragul e determinat intern prin contamination
+        threshold_method_value = 'percentile'
+        if algorithm != "Isolation Forest":
+            st.sidebar.subheader("Threshold Configuration")
+            threshold_method = st.sidebar.radio(
+                "Threshold Method:",
+                options=["Fixed threshold", "Adaptive threshold"],
+                index=1  # Adaptive is default
             )
-            use_percentile = threshold_type == "Percentile"
-            threshold_method_value = 'percentile' if use_percentile else 'adaptive_std'
+
+            threshold_method_value = 'fixed' if 'Fixed' in threshold_method else 'adaptive_std'
+
+            if 'Adaptive' in threshold_method:
+                threshold_type = st.sidebar.selectbox(
+                    "Adaptive Method:",
+                    options=["Percentile", "Mean + k * Std"],
+                    index=0
+                )
+                threshold_method_value = 'percentile' if threshold_type == "Percentile" else 'adaptive_std'
         
         # ADVANCED MODE: Manual parameter control
         if algorithm == "Rolling Stats Z-Score":
@@ -450,8 +445,8 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
             
             # Weights are always configurable in Advanced Mode
             st.sidebar.markdown("**Weights Distribution:**")
-            col1, col2, col3 = st.sidebar.columns(3)
-            
+            col1, col2 = st.sidebar.columns(2)
+
             with col1:
                 w_zscore = st.slider(
                     "Z-Score",
@@ -461,8 +456,6 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                     step=advanced['weights']['zscore_weight']['step'],
                     key="adv_w_zscore"
                 )
-            
-            with col2:
                 w_trend = st.slider(
                     "Trend",
                     min_value=advanced['weights']['trend_weight']['min'],
@@ -471,8 +464,8 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                     step=advanced['weights']['trend_weight']['step'],
                     key="adv_w_trend"
                 )
-            
-            with col3:
+
+            with col2:
                 w_volatility = st.slider(
                     "Volatility",
                     min_value=advanced['weights']['volatility_weight']['min'],
@@ -481,14 +474,14 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                     step=advanced['weights']['volatility_weight']['step'],
                     key="adv_w_volatility"
                 )
-            
-            # Normalize weights
+
+            # Normalize weights so they always sum to 1
             total_weight = w_zscore + w_trend + w_volatility
             if total_weight > 0:
                 weights = (
-                    w_zscore / total_weight,
-                    w_trend / total_weight,
-                    w_volatility / total_weight
+                    w_zscore     / total_weight,
+                    w_trend      / total_weight,
+                    w_volatility / total_weight,
                 )
             else:
                 weights = (0.5, 0.3, 0.2)
@@ -558,7 +551,7 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                     'algorithm': 'hybrid'
                 }
             
-            st.sidebar.info(f"Normalized: Z={weights[0]:.2f}, Trend={weights[1]:.2f}, Vol={weights[2]:.2f}")
+            st.sidebar.info(f"Weights (normalized): Z-Score={weights[0]:.2f}, Trend={weights[1]:.2f}, Volatility={weights[2]:.2f}")
 
         elif algorithm == "Isolation Forest":
             advanced = presets['algorithms']['isolation_forest']['advanced_mode']
@@ -585,10 +578,6 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                 value=advanced['window_size']['default'],
                 step=advanced['window_size']['step']
             )
-            st.sidebar.info(
-                f"Isolation Forest isolates anomalies using {n_estimators} random trees.\n\n"
-                f"Contamination={contamination:.3f} means ~{contamination*100:.1f}% of points will be flagged."
-            )
             algorithm_params = {
                 'contamination': contamination,
                 'n_estimators': n_estimators,
@@ -596,24 +585,63 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
                 'algorithm': 'isolation_forest'
             }
 
-    # Spark settings (available in both Simple and Advanced modes)
-    st.sidebar.divider()
-    st.sidebar.subheader("Distributed Processing")
-    use_spark = st.sidebar.checkbox(
-        "Use Spark for parallel processing",
-        value=False,
-        help="Enable Apache Spark for faster processing on large datasets"
-    )
-    
-    n_cores = st.sidebar.select_slider(
-        "Number of Cores:",
-        options=[1, 2, 4, 8],
-        value=4 if use_spark else 1,
-        help="Number of cores to use for Spark processing"
-    )
-    
-    algorithm_params['use_spark'] = use_spark
-    algorithm_params['n_cores'] = n_cores
+        elif algorithm == "Mean Shift Detector":
+            advanced = presets['algorithms']['mean_shift']['advanced_mode']
+
+            ms_window = st.sidebar.slider(
+                "Window Size (half):",
+                min_value=advanced['window']['min'],
+                max_value=advanced['window']['max'],
+                value=advanced['window']['default'],
+                step=advanced['window']['step'],
+                help="Fiecare punct este comparat cu window puncte inainte si window puncte dupa."
+            )
+
+            if threshold_method_value == 'percentile':
+                percentile = st.sidebar.slider(
+                    "Percentile:",
+                    min_value=advanced['percentile']['min'],
+                    max_value=advanced['percentile']['max'],
+                    value=advanced['percentile']['default'],
+                    step=advanced['percentile']['step']
+                )
+                algorithm_params = {
+                    'threshold_method': 'percentile',
+                    'percentile': percentile,
+                    'window': ms_window,
+                    'algorithm': 'mean_shift'
+                }
+            elif threshold_method_value == 'adaptive_std':
+                k_std = st.sidebar.slider(
+                    "K (Sigma Multiplier):",
+                    min_value=advanced['k_std']['min'],
+                    max_value=advanced['k_std']['max'],
+                    value=advanced['k_std']['default'],
+                    step=advanced['k_std']['step']
+                )
+                algorithm_params = {
+                    'threshold_method': 'adaptive_std',
+                    'k_std': k_std,
+                    'window': ms_window,
+                    'algorithm': 'mean_shift'
+                }
+            else:  # fixed
+                fixed_thr = st.sidebar.slider(
+                    "Fixed Threshold (sigma units):",
+                    min_value=advanced['fixed_threshold']['min'],
+                    max_value=advanced['fixed_threshold']['max'],
+                    value=advanced['fixed_threshold']['default'],
+                    step=advanced['fixed_threshold']['step']
+                )
+                algorithm_params = {
+                    'threshold_method': 'fixed',
+                    'threshold': fixed_thr,
+                    'window': ms_window,
+                    'algorithm': 'mean_shift'
+                }
+
+    algorithm_params['use_spark'] = False
+    algorithm_params['n_cores'] = 1
 
     # Pasează sensitivitatea in Simple Mode pentru afisare in bara de info
     if st.session_state.gui_mode == 'simple':
@@ -637,27 +665,34 @@ def sidebar_controls() -> Tuple[str, dict, int, int]:
     if normalization_method:
         algorithm_params['normalization_method'] = normalization_method
     
-    return data_source, algorithm_params, n_cores, algorithm_params.get(
+    return data_source, algorithm_params, 1, algorithm_params.get(
         'window_size', 20
     )
 
 
 def downsample_data(df: pd.DataFrame, max_points: int = 2000) -> pd.DataFrame:
     """
-    Downsample dataframe for faster rendering.
-    
-    Args:
-        df: DataFrame to downsample
-        max_points: Maximum points to keep (default 2000)
-        
-    Returns:
-        Downsampled DataFrame
+    Min-max downsample: for each bucket keep both the min-value and max-value
+    point so spikes and troughs are never silently dropped by uniform sampling.
     """
     if len(df) <= max_points:
         return df
-    
-    step = len(df) // max_points
-    return df.iloc[::step].reset_index(drop=True)
+
+    n_buckets = max_points // 2
+    step = len(df) / n_buckets
+    kept = set()
+    for i in range(n_buckets):
+        start = int(i * step)
+        end   = int((i + 1) * step)
+        if start >= len(df):
+            break
+        bucket = df.iloc[start:end]
+        if len(bucket) == 0:
+            continue
+        kept.add(bucket['value'].idxmin())
+        kept.add(bucket['value'].idxmax())
+
+    return df.loc[sorted(kept)].reset_index(drop=True)
 
 
 @st.cache_data
@@ -708,24 +743,91 @@ def plot_timeseries_cached(
     return fig
 
 
+_ANOMALY_TYPE_STYLE = {
+    'Spike':       {'color': '#e74c3c', 'symbol': 'x',           'size': 10},
+    'Trend':       {'color': '#3498db', 'symbol': 'diamond',      'size': 10},
+    'Volatility':  {'color': '#e67e22', 'symbol': 'star',         'size': 12},
+    'Mean Shift':  {'color': '#9b59b6', 'symbol': 'triangle-up',  'size': 10},
+    'Flatline':    {'color': '#7f8c8d', 'symbol': 'square',       'size': 10},
+    'Level Shift': {'color': '#8e44ad', 'symbol': 'triangle-up',  'size': 10},
+}
+
+
 def plot_timeseries(
     df: pd.DataFrame,
     anomaly_labels: np.ndarray,
-    anomaly_scores: np.ndarray
+    detection_types: np.ndarray = None
 ) -> go.Figure:
-    """Wrapper for plot_timeseries_cached with downsampling."""
-    df_sampled = downsample_data(df, max_points=2000)
+    """Wrapper for plot_timeseries_cached with downsampling.
 
-    # Extract anomaly x/y from the ORIGINAL df so indices are never mis-mapped
-    # after downsampling.
+    When detection_types is provided, renders one scatter trace per anomaly
+    type using distinct colours and marker symbols (bypasses cache).
+    """
     anom_mask = anomaly_labels == 1
     anom_df = df[anom_mask]
+
+    # Downsample for display performance, but always keep anomaly points in the
+    # line so markers never appear disconnected from the series (floating in air).
+    df_sampled = downsample_data(df, max_points=2000)
+    if len(anom_df) > 0:
+        df_display = (
+            pd.concat([df_sampled, anom_df])
+            .drop_duplicates('timestamp')
+            .sort_values('timestamp')
+            .reset_index(drop=True)
+        )
+    else:
+        df_display = df_sampled
+
+    # ── typed figure (not cached — one trace per anomaly type) ───────────
+    if detection_types is not None and anom_mask.any():
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_display['timestamp'],
+            y=df_display['value'],
+            mode='lines',
+            name='Time Series',
+            line=dict(color='blue', width=1),
+            hovertemplate='<b>%{x}</b><br>Value: %{y:.2f}<extra></extra>'
+        ))
+        anom_types = detection_types[anom_mask]
+        for type_name, style in _ANOMALY_TYPE_STYLE.items():
+            tmask = anom_types == type_name
+            if not tmask.any():
+                continue
+            tdf = anom_df[tmask]
+            fig.add_trace(go.Scatter(
+                x=tdf['timestamp'],
+                y=tdf['value'],
+                mode='markers',
+                name=type_name,
+                marker=dict(
+                    symbol=style['symbol'],
+                    size=style['size'],
+                    color=style['color'],
+                    line=dict(width=1.5, color='rgba(0,0,0,0.4)')
+                ),
+                hovertemplate=(
+                    f'<b>%{{x}}</b><br>Value: %{{y:.2f}}<br>'
+                    f'<b>{type_name}</b><extra></extra>'
+                )
+            ))
+        fig.update_layout(
+            title='Time Series with Detected Anomalies',
+            xaxis_title='Timestamp',
+            yaxis_title='Value',
+            template='plotly_white',
+            hovermode='x unified',
+            height=500,
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+        )
+        return fig
+
+    # ── cached single-colour fallback ─────────────────────────────────────
     anomaly_ts   = tuple(anom_df['timestamp'].values)
     anomaly_vals = tuple(anom_df['value'].values)
-
-    timestamps = tuple(df_sampled['timestamp'].values)
-    values     = tuple(df_sampled['value'].values)
-
+    timestamps = tuple(df_display['timestamp'].values)
+    values     = tuple(df_display['value'].values)
     return plot_timeseries_cached(timestamps, values, anomaly_ts, anomaly_vals)
 
 
@@ -736,15 +838,28 @@ def plot_benchmark_comparison(
     tolerance: int = 100
 ) -> go.Figure:
     """Time series with NAB ground truth bands and TP/FP coloured detections."""
-    df_sampled = downsample_data(df, max_points=2000)
     n = len(df)
+
+    # Downsample for display but always keep detected anomaly points in the line
+    # so markers never appear disconnected from the series (floating in air).
+    df_sampled = downsample_data(df, max_points=2000)
+    if anomaly_indices:
+        anom_rows = df.iloc[[i for i in anomaly_indices if 0 <= i < n]]
+        df_display = (
+            pd.concat([df_sampled, anom_rows])
+            .drop_duplicates('timestamp')
+            .sort_values('timestamp')
+            .reset_index(drop=True)
+        )
+    else:
+        df_display = df_sampled
 
     fig = go.Figure()
 
     # ── time series line ──────────────────────────────────────────────
     fig.add_trace(go.Scatter(
-        x=df_sampled['timestamp'],
-        y=df_sampled['value'],
+        x=df_display['timestamp'],
+        y=df_display['value'],
         mode='lines',
         name='Time Series',
         line=dict(color='#4a90d9', width=1),
@@ -764,13 +879,13 @@ def plot_benchmark_comparison(
         if hit:
             fill = 'rgba(0, 180, 0, 0.15)'
             line_c = 'rgba(0, 160, 0, 0.6)'
-            label = 'TP – interval detectat'
+            label = 'TP – detected interval'
             show = not tp_label_added
             tp_label_added = True
         else:
             fill = 'rgba(255, 120, 0, 0.15)'
             line_c = 'rgba(220, 80, 0, 0.6)'
-            label = 'FN – interval ratat'
+            label = 'FN – missed interval'
             show = not fp_label_added
             fp_label_added = True
 
@@ -931,7 +1046,7 @@ def main():
     initialize_session_state()
     
     # Header
-    st.title("Advanced Anomaly Detection System")
+    st.title("Anomaly Detection System")
     st.divider()
     
     # Sidebar controls
@@ -961,12 +1076,11 @@ def main():
             st.session_state.benchmark_anomaly_indices = None
 
     # Main content
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "Data",
         "Detection",
         "Results",
         "Benchmark",
-        "Parallelism"
     ])
     
     # TAB 1: DATA UPLOAD AND EXPLORATION
@@ -1016,44 +1130,36 @@ def main():
                 loader = DataLoader()
                 all_datasets = loader.list_nab_datasets()
                 
-                # Get recommended datasets from presets
-                presets = st.session_state.presets
-                recommended_paths = set()
-                recommended_info = {}
-                
-                if 'key_datasets' in presets and 'datasets' in presets['key_datasets']:
-                    for ds_info in presets['key_datasets']['datasets']:
-                        if ds_info.get('recommended', False):
-                            recommended_paths.add(ds_info['path'])
-                            recommended_info[ds_info['path']] = {
-                                'name': ds_info['name'],
-                                'description': ds_info['description'],
-                                'order': ds_info.get('order', 999)
-                            }
-                
+                # Serii recomandate fixe
+                recommended_paths = {
+                    "realAWSCloudwatch/ec2_cpu_utilization_5f5533",
+                    "realAWSCloudwatch/ec2_cpu_utilization_24ae8d",
+                    "realAWSCloudwatch/rds_cpu_utilization_e47b3b",
+                    "realKnownCause/nyc_taxi",
+                }
+                recommended_order = [
+                    "realAWSCloudwatch/ec2_cpu_utilization_5f5533",
+                    "realAWSCloudwatch/ec2_cpu_utilization_24ae8d",
+                    "realAWSCloudwatch/rds_cpu_utilization_e47b3b",
+                    "realKnownCause/nyc_taxi",
+                ]
+
                 # Build sorted dataset list
                 if st.session_state.gui_mode == 'simple':
                     # Simple Mode: Recommended first (with star), then all others
-                    recommended_sorted = sorted(
-                        [p for p in all_datasets if p in recommended_paths],
-                        key=lambda x: recommended_info.get(x, {}).get('order', 999)
-                    )
+                    recommended_sorted = [p for p in recommended_order if p in all_datasets]
                     other_datasets = [d for d in all_datasets if d not in recommended_paths]
-                    
-                    # Create display labels with stars for recommended
+
                     dataset_display = {}
                     for ds in recommended_sorted:
-                        info = recommended_info.get(ds, {})
-                        display_label = f"⭐ {info.get('name', ds)} — {info.get('description', '')}"
-                        dataset_display[ds] = display_label
-                    
+                        dataset_display[ds] = f"* {ds}"
                     for ds in other_datasets:
                         dataset_display[ds] = f"   {ds}"
                     
                     # Sorted options: recommended first, then others
                     sorted_options = recommended_sorted + other_datasets
                     
-                    st.markdown("**NAB Dataset Selection** (⭐ = Recommended for testing)")
+                    st.markdown("**NAB Dataset Selection (Recommended datasets marked with \*)**")
                     selected_dataset = st.selectbox(
                         "Select dataset:",
                         options=sorted_options,
@@ -1065,9 +1171,7 @@ def main():
                     dataset_display = {}
                     for ds in all_datasets:
                         if ds in recommended_paths:
-                            info = recommended_info.get(ds, {})
-                            display_label = f"⭐ {info.get('name', ds)}"
-                            dataset_display[ds] = display_label
+                            dataset_display[ds] = f"* {ds}"
                         else:
                             dataset_display[ds] = f"   {ds}"
                     
@@ -1123,15 +1227,17 @@ def main():
                     normalization_method = algorithm_params.get('normalization_method', 'standard')
                     
                     try:
+                        _lo, _hi = np.percentile(display_df['value'].values, [1, 99])
+                        _clipped = np.clip(display_df['value'].values, _lo, _hi)
                         if normalization_method == 'standard':
                             from sklearn.preprocessing import StandardScaler
                             scaler = StandardScaler()
-                            normalized = scaler.fit_transform(display_df['value'].values.reshape(-1, 1)).flatten()
+                            normalized = scaler.fit_transform(_clipped.reshape(-1, 1)).flatten()
                             display_df['value_normalized_standard'] = normalized
                         elif normalization_method == 'minmax':
                             from sklearn.preprocessing import MinMaxScaler
                             scaler = MinMaxScaler()
-                            normalized = scaler.fit_transform(display_df['value'].values.reshape(-1, 1)).flatten()
+                            normalized = scaler.fit_transform(_clipped.reshape(-1, 1)).flatten()
                             display_df['value_normalized_minmax'] = normalized
                         
                         st.info(f"✓ Data normalized using {normalization_method} method")
@@ -1163,13 +1269,11 @@ def main():
                 if st.session_state.gui_mode == 'simple':
                     st.info(
                         f"**Algorithm:** {algorithm_params.get('algorithm', 'unknown')} | "
-                        f"**Sensitivity:** {algorithm_params.get('sensitivity', 'Medium (balanced)')} | "
-                        f"**Cores:** {algorithm_params['n_cores']}"
+                        f"**Sensitivity:** {algorithm_params.get('sensitivity', 'Medium (balanced)')}"
                     )
                 else:
                     st.info(
                         f"**Algorithm:** {algorithm_params.get('algorithm', 'unknown')} | "
-                        f"**Cores:** {algorithm_params['n_cores']} | "
                         f"**Normalize:** {algorithm_params['normalize']}"
                     )
             
@@ -1184,9 +1288,16 @@ def main():
                         values = df['value'].values
                         n_samples = len(values)
                         
-                        # Apply normalization if requested (Advanced Mode only)
+                        # Apply normalization if requested (Advanced Mode only).
+                        # Robust scaling: clip to the 1st-99th percentile before scaling,
+                        # so a few extreme points don't single-handedly set the scale
+                        # (standard practice — also means normalization now genuinely
+                        # changes which points are flagged, instead of being a no-op
+                        # affine transform that cancels out in the detectors' math).
                         if algorithm_params.get('normalize', False):
                             normalization_method = algorithm_params.get('normalization_method', 'standard')
+                            lo, hi = np.percentile(values, [1, 99])
+                            values = np.clip(values, lo, hi)
                             if normalization_method == 'standard':
                                 from sklearn.preprocessing import StandardScaler
                                 scaler = StandardScaler()
@@ -1262,7 +1373,8 @@ def main():
                             'labels': result.labels,
                             'scores': result.scores,
                             'algorithm': result.algorithm,
-                            'exec_time': exec_time
+                            'exec_time': exec_time,
+                            'detection_type': result.detection_type,
                         }
                         
                         # Progress: 100% - Done
@@ -1295,10 +1407,15 @@ def main():
             # Display results
             if st.session_state.detection_results:
                 st.divider()
-                
+
                 results = st.session_state.detection_results
                 df = st.session_state.data
-                
+
+                # Stale results from a different dataset — prompt re-run
+                if len(results['labels']) != len(df):
+                    st.warning("Dataset changed since last detection. Please re-run detection.")
+                    st.stop()
+
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     n_anomalies = int(results['labels'].sum())
@@ -1318,7 +1435,7 @@ def main():
                     fig_ts = plot_timeseries(
                         df,
                         results['labels'],
-                        results['scores']
+                        detection_types=results.get('detection_type')
                     )
                     st.plotly_chart(fig_ts, use_container_width=True)
                 
@@ -1345,15 +1462,19 @@ def main():
             if len(anomaly_indices) > 0:
                 anomaly_data = []
                 df = st.session_state.data
-                
+                dtypes = results.get('detection_type')
+
                 for idx in anomaly_indices[:100]:  # Show first 100
-                    anomaly_data.append({
+                    row = {
                         'Index': idx,
                         'Timestamp': df.iloc[idx]['timestamp'],
                         'Value': f"{df.iloc[idx]['value']:.2f}",
-                        'Score': f"{results['scores'][idx]:.3f}"
-                    })
-                
+                        'Score': f"{results['scores'][idx]:.3f}",
+                    }
+                    if dtypes is not None and idx < len(dtypes) and dtypes[idx]:
+                        row['Type'] = dtypes[idx]
+                    anomaly_data.append(row)
+
                 anomaly_df = pd.DataFrame(anomaly_data)
                 st.dataframe(anomaly_df, use_container_width=True)
             else:
@@ -1363,18 +1484,11 @@ def main():
     with tab4:
         st.subheader("Performance Benchmarking")
         
-        st.markdown("""
-        **Evaluare cu intervale NAB:**
-        - **TP (True Positive)**: Interval care contine cel putin 1 timestamp detectat
-        - **FN (False Negative)**: Interval care NU contine niciun timestamp detectat
-        - **FP (False Positive)**: Timestamp detectat care NU se afla in niciun interval
-        """)
-        
         col1, col2 = st.columns(2)
         
         with col1:
             if not st.session_state.detection_results:
-                st.info("Rulează detecția în tab-ul **Detection** înainte de benchmark.")
+                st.info("Run detection first to benchmark against NAB intervals")
             elif st.button("Run Benchmark", use_container_width=True):
                 try:
                     if not st.session_state.data_loaded:
@@ -1429,12 +1543,6 @@ def main():
                                     st.session_state.benchmark_results = metrics
                                     st.session_state.benchmark_nab_intervals = nab_intervals
                                     st.session_state.benchmark_anomaly_indices = anomaly_indices.tolist()
-                                    st.success(
-                                        f"Benchmark completed: {metrics.detected_anomalies} TP, "
-                                        f"{metrics.missed_anomalies} FN, {metrics.false_alarms} FP\n\n"
-                                        f"Precision={metrics.precision:.3f}, Recall={metrics.recall:.3f}, "
-                                        f"F1={metrics.f1_score:.3f}"
-                                    )
                                 else:
                                     progress_placeholder.empty()
                                     status_placeholder.empty()
@@ -1465,7 +1573,7 @@ def main():
             with col3:
                 st.metric("False Positives (FP)", metrics.false_alarms)
             with col4:
-                st.metric("NAB Score", f"{metrics.nab_score:.1f}")
+                st.metric("Score", f"{metrics.nab_score:.1f}")
             
             st.divider()
             
@@ -1489,10 +1597,10 @@ def main():
             st.divider()
             st.subheader("Detected vs NAB Ground Truth")
             st.markdown(
-                "**Verde** = interval NAB detectat (TP) &nbsp;|&nbsp; "
-                "**Portocaliu** = interval NAB ratat (FN) &nbsp;|&nbsp; "
-                "🟢 marker = detecție corectă (TP) &nbsp;|&nbsp; "
-                "🔴 marker = alarmă falsă (FP)"
+                "**Green** = detected NAB intervals (TP) &nbsp;|&nbsp; "
+                "**Orange** = missed NAB intervals (FN) &nbsp;|&nbsp; "
+                "🟢 = detected anomalies (TP) &nbsp;|&nbsp; "
+                "🔴 = false alarms (FP)"
             )
 
             _nab_iv  = st.session_state.get('benchmark_nab_intervals', [])
@@ -1504,150 +1612,8 @@ def main():
                 )
                 st.plotly_chart(bench_fig, use_container_width=True)
             else:
-                st.info("Rulează benchmark-ul pentru a vedea comparația vizuală.")
+                st.info("Run the benchmark to see the visual comparison.")
 
-    # TAB 5: PARALLELISM BENCHMARK
-    with tab5:
-        st.subheader("Isolation Forest — Paralelism prin ThreadPoolExecutor")
-
-        import multiprocessing as _mp
-        _n_phys = _mp.cpu_count()
-
-        _IF_TASKS     = 4
-        _IF_TREES_PER = 300
-        _IF_MAX_SAMP  = 2000
-        _IF_N_SAMPLES = 80_000
-
-        st.markdown(
-            "Benchmark-ul împarte construirea a **"
-            f"{_IF_TASKS * _IF_TREES_PER} arbori** în **{_IF_TASKS} task-uri independente** "
-            f"de câte **{_IF_TREES_PER} arbori** fiecare. "
-            "Rulează cu **1, 2, 4 thread-uri** (ThreadPoolExecutor — fără overhead de "
-            "pornire procese). Fiecare task construiește arbori complet independent — "
-            "*embarrassingly parallel*."
-        )
-        st.caption(
-            f"Date sintetice: **{_IF_N_SAMPLES:,} rânduri × 4 features** | "
-            f"max_samples per arbore: **{_IF_MAX_SAMP}** | "
-            f"Core-uri fizice: **{_n_phys}**"
-        )
-
-        if st.button("Run Isolation Forest Parallelism Benchmark",
-                     use_container_width=True):
-            from sklearn.ensemble import IsolationForest as _IF
-            from concurrent.futures import ThreadPoolExecutor
-
-            if_status = st.empty()
-            if_prog   = st.empty()
-
-            rng        = np.random.default_rng(42)
-            _vals      = rng.normal(50, 10, _IF_N_SAMPLES)
-            _s         = pd.Series(_vals)
-            _roll_mean = _s.rolling(20, min_periods=1).mean().values
-            _roll_std  = _s.rolling(20, min_periods=1).std().fillna(0).values
-            _roll_diff = _s.diff().abs().fillna(0).values
-            _feats     = np.column_stack([_vals, _roll_mean, _roll_std, _roll_diff])
-
-            def _build_trees(seed):
-                m = _IF(
-                    n_estimators=_IF_TREES_PER,
-                    max_samples=_IF_MAX_SAMP,
-                    contamination=0.01,
-                    random_state=seed,
-                    n_jobs=1
-                )
-                m.fit(_feats)
-                return seed
-
-            workers_list = [1, 2, 4]
-            if_times     = {}
-
-            for i, nw in enumerate(workers_list):
-                if_status.info(f"Rulează {_IF_TASKS} task-uri cu {nw} thread-uri... ({i+1}/3)")
-                with if_prog.container():
-                    st.progress(i / 3)
-                t0 = time.time()
-                with ThreadPoolExecutor(max_workers=nw) as ex:
-                    list(ex.map(_build_trees, range(_IF_TASKS)))
-                if_times[nw] = round(time.time() - t0, 3)
-
-            if_prog.empty()
-            if_status.empty()
-
-            t1_if      = if_times[1]
-            speedup_if = {nw: round(t1_if / t, 3) for nw, t in if_times.items() if t > 0}
-
-            st.session_state['if_parallel_results'] = {
-                'times':     if_times,
-                'speedup':   speedup_if,
-                'n_tasks':   _IF_TASKS,
-                'trees_per': _IF_TREES_PER,
-                'max_samp':  _IF_MAX_SAMP,
-                'n_samples': _IF_N_SAMPLES,
-                'n_cores':   _n_phys,
-            }
-            st.success(
-                f"Benchmark completat: {_IF_TASKS} task-uri × {_IF_TREES_PER} arbori "
-                f"pe {_IF_N_SAMPLES:,} puncte."
-            )
-
-        if st.session_state.get('if_parallel_results'):
-            ifr      = st.session_state['if_parallel_results']
-            workers  = list(ifr['times'].keys())
-            times_y  = list(ifr['times'].values())
-            spd_y    = [ifr['speedup'].get(w, 0) for w in workers]
-            x_labels = [f'{w} thread{"" if w == 1 else "s"}' for w in workers]
-
-            if_df = pd.DataFrame({
-                'Threads':             x_labels,
-                'Timp total (s)':      times_y,
-                'Speedup vs 1 thread': spd_y,
-            })
-            st.dataframe(if_df, use_container_width=True)
-
-            fig_if = go.Figure()
-            fig_if.add_trace(go.Bar(
-                x=x_labels, y=times_y,
-                marker_color=['#d9534f', '#f0ad4e', '#5cb85c'][:len(workers)],
-                text=[f"{t}s" for t in times_y],
-                textposition='outside',
-            ))
-            fig_if.update_layout(
-                title=(f"Isolation Forest — {ifr['n_tasks']} task-uri × "
-                       f"{ifr['trees_per']} arbori, {ifr['n_samples']:,} puncte sintetice"),
-                xaxis_title="Număr de thread-uri",
-                yaxis_title="Timp total (secunde)",
-                template="plotly_white", height=380, showlegend=False
-            )
-            st.plotly_chart(fig_if, use_container_width=True)
-
-            # y-axis starts just below 1 so even small improvements are visible
-            _min_spd = 0.9
-            _max_spd = 2.5
-
-            fig_spd = go.Figure()
-            fig_spd.add_trace(go.Scatter(
-                x=x_labels, y=spd_y, mode='lines+markers', name='Speedup real',
-                line=dict(color='green', width=2.5),
-                marker=dict(size=10, color='green', line=dict(color='darkgreen', width=1.5))
-            ))
-            # Annotate each point with its speedup value
-            for xi, yi in zip(x_labels, spd_y):
-                fig_spd.add_annotation(
-                    x=xi, y=yi, text=f"<b>{yi}x</b>",
-                    showarrow=False, yshift=14,
-                    font=dict(size=12, color='green')
-                )
-            fig_spd.update_layout(
-                title="Speedup Isolation Forest — embarrassingly parallel",
-                xaxis_title="Număr de thread-uri",
-                yaxis_title="Speedup față de execuție secvențială",
-                yaxis=dict(range=[_min_spd, _max_spd], dtick=0.25, gridcolor='#eeeeee'),
-                template="plotly_white",
-                height=420,
-                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
-            )
-            st.plotly_chart(fig_spd, use_container_width=True)
 
 
 

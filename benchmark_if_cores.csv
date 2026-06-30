@@ -1,0 +1,15 @@
+dimensiune,n_puncte,backend,n_jobs,n_cores_real,timp_mediu_ms,ram_peak_mb,t_min_ms,t_max_ms,speedup_vs_seq
+Originala (~22k pct),22695,sequential,1,1,1255.86,2.26,1240.13,1267.74,1.0
+Originala (~22k pct),22695,loky,2,2,1052.12,2.62,328.83,2484.74,1.194
+Originala (~22k pct),22695,loky,4,4,1372.78,2.23,324.15,3441.07,0.915
+Originala (~22k pct),22695,loky,-1,8,2127.59,2.25,318.34,5703.06,0.59
+Originala (~22k pct),22695,threading,2,2,1247.47,3.59,1229.96,1270.5,1.007
+Originala (~22k pct),22695,threading,4,4,1432.85,3.7,1357.11,1525.91,0.876
+Originala (~22k pct),22695,threading,-1,8,1398.85,5.9,1371.51,1418.22,0.898
+Concatenata (1M pct),1000000,sequential,1,1,10661.16,76.81,10477.94,10865.13,1.0
+Concatenata (1M pct),1000000,loky,2,2,10657.72,76.79,9461.05,12882.39,1.0
+Concatenata (1M pct),1000000,loky,4,4,10815.8,76.79,9438.03,13496.86,0.986
+Concatenata (1M pct),1000000,loky,-1,8,11823.68,76.79,9548.41,16092.08,0.902
+Concatenata (1M pct),1000000,threading,2,2,5416.25,130.33,4701.77,6263.5,1.968
+Concatenata (1M pct),1000000,threading,4,4,4964.04,132.74,4891.11,5072.02,2.148
+Concatenata (1M pct),1000000,threading,-1,8,5085.49,212.63,4857.08,5218.66,2.096

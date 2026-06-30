@@ -1,0 +1,4 @@
+n_threads,dataset,execution_time_s,peak_ram_mb
+1,realAWSCloudwatch/ec2_cpu_utilization_825cc2,13.058,0.1
+2,realAWSCloudwatch/ec2_cpu_utilization_825cc2,12.88,0.12
+4,realAWSCloudwatch/ec2_cpu_utilization_825cc2,13.075,0.15
