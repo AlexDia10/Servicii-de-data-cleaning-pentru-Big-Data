@@ -21,20 +21,6 @@ from utils import setup_logger
 logger = setup_logger(__name__)
 
 
-def print_banner():
-    """Print application banner."""
-    banner = """
-    ╔═════════════════════════════════════════════════════════════╗
-    ║                                                             ║
-    ║   ADVANCED ANOMALY DETECTION SYSTEM FOR TIME SERIES DATA    ║
-    ║                                                             ║
-    ║   Scalable | Distributed | Production-Ready                 ║
-    ║                                                             ║
-    ╚═════════════════════════════════════════════════════════════╝
-    """
-    print(banner)
-
-
 def detect_command(args):
     """Run anomaly detection on a dataset."""
     print(f"\n📂 Loading data from: {args.input}")
@@ -266,8 +252,6 @@ def info_command(args):
 
 def main():
     """Main application entry point."""
-    print_banner()
-    
     parser = argparse.ArgumentParser(
         description="Advanced Anomaly Detection System for Time Series Data",
         formatter_class=argparse.RawDescriptionHelpFormatter

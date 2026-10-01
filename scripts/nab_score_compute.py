@@ -16,7 +16,10 @@ Profilele NAB:
 """
 
 import sys, os
-sys.path.insert(0, os.path.abspath("NAB"))  # face nab/ importabil
+from pathlib import Path
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "NAB"))   # face nab/ importabil
+sys.path.insert(0, str(ROOT))           # face anomaly_algorithms importabil
 
 import json
 import math
@@ -36,9 +39,9 @@ from anomaly_algorithms import AnomalyDetectionEngine
 
 # ── Configurare ───────────────────────────────────────────────────────────────
 
-NAB_DATA   = Path("NAB/data")
-NAB_LABELS = Path("NAB/labels/combined_windows.json")
-NAB_RESULTS= Path("NAB/results")
+NAB_DATA   = ROOT / "NAB/data"
+NAB_LABELS = ROOT / "NAB/labels/combined_windows.json"
+NAB_RESULTS= ROOT / "NAB/results"
 
 # Parametri fixe per algoritm (identici cu evaluarea anterioara)
 ALGO_FIXED = {
@@ -284,8 +287,9 @@ def main():
         print()
 
     df_out = pd.DataFrame(rows)
-    df_out.to_csv("nab_scores.csv", index=False)
-    print("Salvat: nab_scores.csv")
+    out_path = ROOT / "results" / "nab_scores.csv"
+    df_out.to_csv(out_path, index=False)
+    print(f"Salvat: {out_path}")
 
     # Tabel final compact (Standard profile)
     print("\n=== NAB Score — Standard Profile ===")

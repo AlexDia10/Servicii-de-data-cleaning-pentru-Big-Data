@@ -11,6 +11,7 @@ Outputs:
   results_parallelism.csv  — columns: n_threads, dataset, execution_time_s, peak_ram_mb
 """
 
+import sys
 import time
 import tracemalloc
 import traceback
@@ -22,6 +23,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest as _IF
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from anomaly_algorithms import AnomalyDetectionEngine
 from benchmark import Benchmark
 from nab_integration import NABIntegration
@@ -270,7 +272,8 @@ def run_task2(nab: NABIntegration) -> pd.DataFrame:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
-    out_dir = Path(__file__).parent
+    out_dir = Path(__file__).resolve().parent.parent / "results"
+    out_dir.mkdir(parents=True, exist_ok=True)
     nab = NABIntegration()
 
     # Task 1 + 3

@@ -17,16 +17,17 @@ from pathlib import Path
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-sys.path.insert(0, str(Path(__file__).parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 from anomaly_algorithms import (
     RollingStatsZScore, PredictionErrorAnomaly,
     HybridAnomalyScore, IsolationForestDetector,
 )
 
-NAB_DATA   = Path(__file__).parent / "NAB" / "data"
-NAB_LABELS = Path(__file__).parent / "NAB" / "labels" / "combined_windows.json"
-OUT_DIR    = Path(__file__).parent / "nab_analysis_charts"
-OUT_DIR.mkdir(exist_ok=True)
+NAB_DATA   = ROOT / "NAB" / "data"
+NAB_LABELS = ROOT / "NAB" / "labels" / "combined_windows.json"
+OUT_DIR    = ROOT / "results" / "nab_analysis_charts"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 with open(NAB_LABELS) as f:
     WINDOWS = json.load(f)

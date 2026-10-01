@@ -7,11 +7,15 @@ Output:
   results_summary.csv   — media per (categorie, algoritm, threshold)
 """
 
+import sys
 import traceback
 import time
 import numpy as np
 import pandas as pd
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 from nab_integration import NABIntegration
 from anomaly_algorithms import AnomalyDetectionEngine
@@ -21,7 +25,7 @@ from benchmark import Benchmark
 
 CATEGORIES = ['realAWSCloudwatch', 'realKnownCause', 'artificialWithAnomaly']
 
-NAB_DIR = Path('NAB/data')
+NAB_DIR = ROOT / 'NAB/data'
 
 NAB_TOLERANCE = 100
 
@@ -161,7 +165,9 @@ def main():
         'category','series','algorithm','threshold',
         'precision','recall','f1','tp','fp','fn','time_ms'
     ])
-    df_det.to_csv('results_detailed.csv', index=False)
+    out_dir = ROOT / 'results'
+    out_dir.mkdir(parents=True, exist_ok=True)
+    df_det.to_csv(out_dir / 'results_detailed.csv', index=False)
     print(f'\nSalvat: results_detailed.csv  ({len(df_det)} randuri)')
 
     # ── Salvare summary ───────────────────────────────────────────────────────
@@ -176,7 +182,7 @@ def main():
                   'recall':    'avg_recall',
                   'f1':        'avg_f1',
               }))
-    df_sum.to_csv('results_summary.csv', index=False)
+    df_sum.to_csv(out_dir / 'results_summary.csv', index=False)
     print(f'Salvat: results_summary.csv  ({len(df_sum)} randuri)')
 
     # ── Preview summary ───────────────────────────────────────────────────────

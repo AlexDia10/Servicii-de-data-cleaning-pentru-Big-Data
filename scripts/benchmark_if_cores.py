@@ -16,11 +16,13 @@ import time
 import numpy as np
 import pandas as pd
 import joblib
+from pathlib import Path
 from sklearn.ensemble import IsolationForest
 
 # ── Configurare ───────────────────────────────────────────────────────────────
 
-CSV_PATH      = "NAB/data/realKnownCause/machine_temperature_system_failure.csv"
+ROOT          = Path(__file__).resolve().parent.parent
+CSV_PATH      = str(ROOT / "NAB/data/realKnownCause/machine_temperature_system_failure.csv")
 TARGET_SIZE   = 1_000_000
 N_REPEATS     = 3
 N_JOBS_LIST   = [1, 2, 4, -1]
@@ -165,8 +167,9 @@ def main():
     bench_size(f"Concatenata (1M pct)",              data_1m,   rows)
 
     df_out = pd.DataFrame(rows)
-    df_out.to_csv("benchmark_if_cores.csv", index=False)
-    print(f"\n\nSalvat: benchmark_if_cores.csv")
+    out_path = ROOT / "results" / "benchmark_if_cores.csv"
+    df_out.to_csv(out_path, index=False)
+    print(f"\n\nSalvat: {out_path}")
 
     # Rezumat comparativ
     print("\n=== Speedup real (vs. secvential 1 core) ===")

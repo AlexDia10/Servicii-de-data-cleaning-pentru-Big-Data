@@ -13,11 +13,15 @@ Part 2: N serii NAB procesate simultan
 Rezultate salvate in benchmark_spark_hybrid.csv
 """
 
-import warnings, logging, os, time
+import warnings, logging, os, sys, time
+from pathlib import Path
 warnings.filterwarnings("ignore")
 logging.getLogger("py4j").setLevel(logging.ERROR)
 logging.getLogger("pyspark").setLevel(logging.ERROR)
-os.environ["PYSPARK_PYTHON"] = "spark-env\\Scripts\\python.exe"
+
+ROOT = Path(__file__).resolve().parent.parent
+os.environ["PYSPARK_PYTHON"] = str(ROOT / "spark-env" / "Scripts" / "python.exe")
+sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import pandas as pd
@@ -202,8 +206,9 @@ def main():
     print("=" * 65)
     print(f"JVM startup (cost fix, o singura data): {t_jvm:.0f} ms")
     df_out = pd.DataFrame(rows)
-    df_out.to_csv("benchmark_spark_hybrid.csv", index=False)
-    print("Salvat: benchmark_spark_hybrid.csv")
+    out_path = ROOT / "results" / "benchmark_spark_hybrid.csv"
+    df_out.to_csv(out_path, index=False)
+    print(f"Salvat: {out_path}")
 
     spark.stop()
 

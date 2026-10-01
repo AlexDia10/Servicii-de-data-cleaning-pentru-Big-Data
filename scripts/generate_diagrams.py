@@ -11,7 +11,8 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 import matplotlib.patheffects as pe
 from pathlib import Path
 
-OUT = Path("output/validation")
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "results" / "output" / "validation"
 OUT.mkdir(parents=True, exist_ok=True)
 
 # ── Paleta de culori ────────────────────────────────────────────────────────
